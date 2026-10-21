@@ -137,6 +137,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         if (type != TransactionType.transfer) _toAccount = null;
       });
 
+  /// Turns the form into a cash withdrawal (M-Pesa → Cash) or a cash deposit
+  /// (Cash → M-Pesa): a real transfer with both accounts set, so it counts
+  /// as neither spending nor income. Amount, fee, date and note are kept; an
+  /// empty description is filled in. Editing an older entry this way updates
+  /// that same entry rather than adding a new one.
+  void _recordCashMove({required bool withdrawal}) {
+    _selectType(TransactionType.transfer);
+    setState(() {
+      _account = withdrawal ? Account.mpesa : Account.cash;
+      _toAccount = withdrawal ? Account.cash : Account.mpesa;
+    });
+    if (_descriptionController.text.trim().isEmpty) {
+      _descriptionController.text =
+          withdrawal ? 'Cash withdrawal' : 'Cash deposit';
+    }
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -252,7 +269,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categories = DefaultCategories.forType(_type);
+    final categories = DefaultCategories.forType(_type,
+        keep: widget.initial?.categoryId);
     final fixedCategory = DefaultCategories.hasFixedCategory(_type);
     // "Not set" is offered only for an older entry that has no account.
     final accountChoices = <Account?>[
@@ -275,229 +293,248 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       body: SafeArea(
         child: Form(
           key: _formKey,
-          child: ListView(
+          // Not a ListView: that disposes fields scrolled far off screen, and
+          // Form.validate() would then skip them (e.g. an invalid amount at
+          // the top while the user taps Save at the bottom).
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            children: [
-              if (widget.initial case final t? when t.isDetected) ...[
-                _DetectedInfo(transaction: t),
-                const SizedBox(height: 16),
-              ],
-              SegmentedButton<TransactionType>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: TransactionType.expense,
-                    label: Text('Expense'),
-                    icon: Icon(Icons.arrow_upward_rounded),
-                  ),
-                  ButtonSegment(
-                    value: TransactionType.income,
-                    label: Text('Income'),
-                    icon: Icon(Icons.arrow_downward_rounded),
-                  ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (widget.initial case final t? when t.isDetected) ...[
+                  _DetectedInfo(transaction: t),
+                  const SizedBox(height: 16),
                 ],
-                // Nothing highlighted while one of the other types is chosen.
-                emptySelectionAllowed: true,
-                selected: {
-                  if (_type == TransactionType.expense ||
-                      _type == TransactionType.income)
-                    _type,
-                },
-                onSelectionChanged: (selection) {
-                  if (selection.isNotEmpty) _selectType(selection.first);
-                },
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final type in _otherTypes)
-                    ChoiceChip(
-                      label: Text(type.label),
-                      selected: _type == type,
-                      onSelected: (_) => _selectType(type),
+                SegmentedButton<TransactionType>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: TransactionType.expense,
+                      label: Text('Expense'),
+                      icon: Icon(Icons.arrow_upward_rounded),
                     ),
-                ],
-              ),
-              if (_typeHelp case final help?) ...[
-                const SizedBox(height: 8),
-                Text(
-                  help,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _amountController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: _accent,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Amount',
-                  prefixText: '${Formatters.currencySymbol} ',
-                ),
-                validator: Validators.amount,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _descriptionController,
-                textCapitalization: TextCapitalization.sentences,
-                maxLength: 100,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'e.g. Groceries',
-                  counterText: '',
-                ),
-                validator: (value) => Validators.requiredText(
-                  value,
-                  emptyMessage: 'Enter a description',
-                  max: 100, // same limit as the security rules
-                ),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<Account?>(
-                key: ValueKey('account-$_type'),
-                initialValue: _account,
-                decoration: InputDecoration(labelText: _accountLabel),
-                items: [
-                  for (final a in accountChoices)
-                    DropdownMenuItem(
-                      value: a,
-                      child: Text(a?.label ?? 'Not set'),
+                    ButtonSegment(
+                      value: TransactionType.income,
+                      label: Text('Income'),
+                      icon: Icon(Icons.arrow_downward_rounded),
                     ),
-                ],
-                onChanged: (a) => setState(() => _account = a),
-                validator: (a) => _type == TransactionType.transfer && a == null
-                    ? 'Choose where the money came from'
-                    : null,
-              ),
-              if (_type == TransactionType.transfer) ...[
-                const SizedBox(height: 16),
-                DropdownButtonFormField<Account>(
-                  key: const ValueKey('toAccount'),
-                  initialValue: _toAccount,
-                  decoration: const InputDecoration(labelText: 'To account'),
-                  items: [
-                    for (final a in Account.spendable)
-                      DropdownMenuItem(value: a, child: Text(a.label)),
                   ],
-                  onChanged: (a) => setState(() => _toAccount = a),
-                  validator: (a) {
-                    if (a == null) return 'Choose where the money went';
-                    if (a == _account) return 'Pick a different account';
-                    return null;
+                  // Nothing highlighted while one of the other types is chosen.
+                  emptySelectionAllowed: true,
+                  selected: {
+                    if (_type == TransactionType.expense ||
+                        _type == TransactionType.income)
+                      _type,
                   },
-                ),
-              ],
-              if (_hasFee) ...[
-                const SizedBox(height: 16),
-                TextFormField(
-                  key: const ValueKey('fee'),
-                  controller: _feeController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Transaction cost (optional)',
-                    helperText: 'e.g. the M-Pesa charge. Counted as spending.',
-                    prefixText: '${Formatters.currencySymbol} ',
-                  ),
-                  validator: Validators.optionalAmount,
-                ),
-              ],
-              if (_type == TransactionType.debtRepayment) ...[
-                const SizedBox(height: 16),
-                TextFormField(
-                  key: const ValueKey('interest'),
-                  controller: _interestController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Interest or charges included (optional)',
-                    helperText: 'Only this part counts as spending. Leave it '
-                        "empty if you don't know it.",
-                    prefixText: '${Formatters.currencySymbol} ',
-                  ),
-                  validator: _validateInterest,
-                ),
-              ],
-              if (!fixedCategory) ...[
-                const SizedBox(height: 20),
-                Text(
-                  _type == TransactionType.refund
-                      ? 'Category of the purchase refunded'
-                      : 'Category',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
+                  onSelectionChanged: (selection) {
+                    if (selection.isNotEmpty) _selectType(selection.first);
+                  },
                 ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  runSpacing: 8,
+                  runSpacing: 4,
                   children: [
-                    for (final category in categories)
+                    for (final type in _otherTypes)
                       ChoiceChip(
-                        avatar: Icon(category.icon, size: 18),
-                        label: Text(category.name),
-                        selected: _categoryId == category.id,
-                        onSelected: (_) => setState(() {
-                          _categoryId = category.id;
-                          _showCategoryError = false;
-                        }),
+                        label: Text(type.label),
+                        selected: _type == type,
+                        onSelected: (_) => _selectType(type),
                       ),
                   ],
                 ),
-                if (_showCategoryError)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6, left: 4),
-                    child: Text(
-                      'Choose a category',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                        fontSize: 12,
-                      ),
+                if (_typeHelp case final help?) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    help,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
                     ),
                   ),
-              ],
-              const SizedBox(height: 20),
-              InkWell(
-                onTap: _pickDate,
-                borderRadius: BorderRadius.circular(12),
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Date',
-                    suffixIcon: Icon(Icons.calendar_today_rounded),
+                ],
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _amountController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: _accent,
                   ),
-                  child: Text(Formatters.shortDate(_date)),
+                  decoration: const InputDecoration(
+                    labelText: 'Amount',
+                    prefixText: '${Formatters.currencySymbol} ',
+                  ),
+                  validator: Validators.amount,
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _noteController,
-                maxLines: 2,
-                maxLength: 500,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Note (optional)',
-                  counterText: '',
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _descriptionController,
+                  textCapitalization: TextCapitalization.sentences,
+                  maxLength: 100,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'e.g. Groceries',
+                    counterText: '',
+                  ),
+                  validator: (value) => Validators.requiredText(
+                    value,
+                    emptyMessage: 'Enter a description',
+                    max: 100, // same limit as the security rules
+                  ),
                 ),
-                validator: (value) => Validators.optionalText(value, max: 500),
-              ),
-              const SizedBox(height: 28),
-              FilledButton(
-                onPressed: _save,
-                child: Text(_isEditing ? 'Save changes' : 'Save transaction'),
-              ),
-            ],
+                const SizedBox(height: 16),
+                DropdownButtonFormField<Account?>(
+                  key: ValueKey('account-$_type'),
+                  initialValue: _account,
+                  decoration: InputDecoration(labelText: _accountLabel),
+                  items: [
+                    for (final a in accountChoices)
+                      DropdownMenuItem(
+                        value: a,
+                        child: Text(a?.label ?? 'Not set'),
+                      ),
+                  ],
+                  onChanged: (a) => setState(() => _account = a),
+                  validator: (a) => _type == TransactionType.transfer && a == null
+                      ? 'Choose where the money came from'
+                      : null,
+                ),
+                if (_type == TransactionType.transfer) ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<Account>(
+                    key: const ValueKey('toAccount'),
+                    initialValue: _toAccount,
+                    decoration: const InputDecoration(labelText: 'To account'),
+                    items: [
+                      for (final a in Account.spendable)
+                        DropdownMenuItem(value: a, child: Text(a.label)),
+                    ],
+                    onChanged: (a) => setState(() => _toAccount = a),
+                    validator: (a) {
+                      if (a == null) return 'Choose where the money went';
+                      if (a == _account) return 'Pick a different account';
+                      return null;
+                    },
+                  ),
+                ],
+                if (_hasFee) ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    key: const ValueKey('fee'),
+                    controller: _feeController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Transaction cost (optional)',
+                      helperText: 'e.g. the M-Pesa charge. Counted as spending.',
+                      prefixText: '${Formatters.currencySymbol} ',
+                    ),
+                    validator: Validators.optionalAmount,
+                  ),
+                ],
+                if (_type == TransactionType.debtRepayment) ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    key: const ValueKey('interest'),
+                    controller: _interestController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Interest or charges included (optional)',
+                      helperText: 'Only this part counts as spending. Leave it '
+                          "empty if you don't know it.",
+                      prefixText: '${Formatters.currencySymbol} ',
+                    ),
+                    validator: _validateInterest,
+                  ),
+                ],
+                if (!fixedCategory) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    _type == TransactionType.refund
+                        ? 'Category of the purchase refunded'
+                        : 'Category',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final category in categories)
+                        ChoiceChip(
+                          avatar: Icon(category.icon, size: 18),
+                          label: Text(category.name),
+                          selected: _categoryId == category.id,
+                          onSelected: (_) => setState(() {
+                            _categoryId = category.id;
+                            _showCategoryError = false;
+                          }),
+                        ),
+                    ],
+                  ),
+                  if (_showCategoryError)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, left: 4),
+                      child: Text(
+                        'Choose a category',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  // Cash at an agent is a transfer, not spending or income.
+                  if (_type == TransactionType.expense ||
+                      _type == TransactionType.income) ...[
+                    const SizedBox(height: 12),
+                    ActionChip(
+                      avatar: const Icon(Icons.swap_horiz_rounded, size: 18),
+                      label: Text(_type == TransactionType.expense
+                          ? 'Cash withdrawal → Transfer'
+                          : 'Cash deposit → Transfer'),
+                      onPressed: () => _recordCashMove(
+                          withdrawal: _type == TransactionType.expense),
+                    ),
+                  ],
+                ],
+                const SizedBox(height: 20),
+                InkWell(
+                  onTap: _pickDate,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Date',
+                      suffixIcon: Icon(Icons.calendar_today_rounded),
+                    ),
+                    child: Text(Formatters.shortDate(_date)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _noteController,
+                  maxLines: 2,
+                  maxLength: 500,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Note (optional)',
+                    counterText: '',
+                  ),
+                  validator: (value) => Validators.optionalText(value, max: 500),
+                ),
+                const SizedBox(height: 28),
+                FilledButton(
+                  onPressed: _save,
+                  child: Text(_isEditing ? 'Save changes' : 'Save transaction'),
+                ),
+              ],
+            ),
           ),
         ),
       ),

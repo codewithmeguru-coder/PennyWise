@@ -188,14 +188,25 @@ class DefaultCategories {
     type: TransactionType.expense,
   );
 
+  /// Categories from before transfers existed. Cash moving between M-Pesa
+  /// and your pocket is a transfer, not spending or income, so new entries
+  /// can't pick these; older transactions that use them still display.
+  static const retired = {'cash_withdrawal', 'cash_deposit'};
+
   /// The categories the user can pick for [type]. A refund gives money back
   /// for a purchase, so it uses the expense categories (not fees).
-  static List<TransactionCategory> forType(TransactionType type) {
+  ///
+  /// [retired] categories are left out unless [keep] names one, so editing
+  /// an older transaction still shows the category it has.
+  static List<TransactionCategory> forType(TransactionType type,
+      {String? keep}) {
     final lookup =
         type == TransactionType.refund ? TransactionType.expense : type;
     return all
-        .where((c) => c.type == lookup && !(type == TransactionType.refund &&
-            c.id == 'fees'))
+        .where((c) =>
+            c.type == lookup &&
+            !(type == TransactionType.refund && c.id == 'fees') &&
+            (!retired.contains(c.id) || c.id == keep))
         .toList();
   }
 

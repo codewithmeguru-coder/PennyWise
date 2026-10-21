@@ -44,8 +44,9 @@ void main() {
     // The button sits below the fold of the default test window.
     await scrollAndTap(tester, 'Save transaction');
 
-    // The form is taller than the test window, so the first errors may be
-    // scrolled above it after tapping Save.
+    // The form is taller than the test window: go back up to the first
+    // fields to read their errors.
+    await scrollToTop(tester);
     expect(find.text('Enter an amount', skipOffstage: false), findsOneWidget);
     expect(find.text('Enter a description', skipOffstage: false),
         findsOneWidget);
@@ -91,6 +92,7 @@ void main() {
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Amount'), '10.999');
     await scrollAndTap(tester, 'Save transaction');
+    await scrollToTop(tester);
 
     expect(find.text('Use at most 2 decimal places', skipOffstage: false),
         findsOneWidget);

@@ -50,3 +50,12 @@ Future<void> scrollAndTap(WidgetTester tester, String label) async {
   await tester.tap(find.text(label));
   await tester.pumpAndSettle();
 }
+
+/// Scrolls the open screen back to its top, e.g. to read validation errors
+/// on the first fields after tapping a button at the bottom of a long form
+/// (a lazily built list drops rows that are far off screen).
+Future<void> scrollToTop(WidgetTester tester) async {
+  await tester.drag(
+      find.byType(Scrollable).hitTestable().first, const Offset(0, 3000));
+  await tester.pumpAndSettle();
+}
