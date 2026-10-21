@@ -86,9 +86,18 @@ void main() {
 
       expect(t.kind, SmsTransactionKind.withdrawal);
       expect(t.amount, 3000);
-      expect(t.type, TransactionType.expense);
+      // Moving money from M-Pesa into cash, not spending it.
+      expect(t.type, TransactionType.transfer);
       expect(t.counterparty, 'Mama Mboga Agencies');
       expect(SmsCategorizer.categorize(t), 'cash_withdrawal');
+
+      final model = SmsImportService.toTransaction(t);
+      expect(model.description, 'Cash withdrawal');
+      expect(model.categoryId, 'transfer');
+      expect(model.account, Account.mpesa);
+      expect(model.toAccount, Account.cash);
+      expect(model.fee, 53);
+      expect(model.note, 'Agent: Mama Mboga Agencies');
     });
 
     test('cash deposit at an agent', () {
@@ -97,8 +106,14 @@ void main() {
           'Ksh5,700.00.')!;
 
       expect(t.kind, SmsTransactionKind.deposit);
-      expect(t.type, TransactionType.income);
+      // Moving cash into M-Pesa, not income.
+      expect(t.type, TransactionType.transfer);
       expect(SmsCategorizer.categorize(t), 'cash_deposit');
+
+      final model = SmsImportService.toTransaction(t);
+      expect(model.account, Account.cash);
+      expect(model.toAccount, Account.mpesa);
+      expect(model.fee, isNull);
     });
 
     test('airtime purchase', () {
@@ -216,9 +231,47 @@ void main() {
       expect(model.amount, 1500);
       expect(model.source, TransactionSource.mpesa);
       expect(model.reference, 'TJ6AB1CD2F');
-      expect(model.note, 'Transaction cost: KSh 23.00');
+      // The charge is a number now, so it counts in the totals.
+      expect(model.fee, 23);
+      expect(model.note, isNull);
+      expect(model.type, TransactionType.expense);
+      expect(model.account, Account.mpesa);
       expect(model.smsText, isNot(contains('0712345678')));
       expect(model.smsText, contains('07*****678'));
+    });
+  });
+
+  group('savings products', () {
+    test('money sent to Ziidi is a savings contribution, not spending', () {
+      final t = mpesa('TJ6AB1CD3A Confirmed. Ksh1,000.00 sent to ZIIDI on '
+          '12/10/26 at 8:15 PM. New M-PESA balance is Ksh1,200.00. '
+          'Transaction cost, Ksh0.00.')!;
+      final model = SmsImportService.toTransaction(t);
+
+      expect(model.type, TransactionType.savingsContribution);
+      expect(model.categoryId, 'savings');
+      expect(model.account, Account.mpesa);
+      expect(model.fee, isNull); // a KSh 0.00 charge isn't stored
+    });
+
+    test('money received from Ziidi is a savings withdrawal, not income', () {
+      final t = mpesa('TJ6AB1CD3B Confirmed.You have received Ksh2,000.00 '
+          'from ZIIDI on 13/10/26 at 9:00 AM. New M-PESA balance is '
+          'Ksh3,200.00.')!;
+      final model = SmsImportService.toTransaction(t);
+
+      expect(model.type, TransactionType.savingsWithdrawal);
+      expect(model.categoryId, 'savings_withdrawal');
+    });
+
+    test('a Ziidi advert at the end of a payment SMS changes nothing', () {
+      final t = mpesa('TJ6AB1CD3C Confirmed. Ksh250.00 paid to NAIVAS. on '
+          '13/10/26 at 1:20 PM.New M-PESA balance is Ksh2,950.00. '
+          'Transaction cost, Ksh0.00. Invest & earn daily interest with '
+          'ZIIDI on https://example.com')!;
+
+      expect(t.type, TransactionType.expense);
+      expect(SmsImportService.toTransaction(t).categoryId, 'shopping');
     });
   });
 }

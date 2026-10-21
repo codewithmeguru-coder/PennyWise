@@ -1,5 +1,84 @@
-/// Whether money came in or went out.
-enum TransactionType { income, expense }
+/// What a transaction is, for accounting purposes.
+///
+/// Only [income] and [expense] change what you earned or spent. The others
+/// move money around (between your accounts, into or out of savings) or
+/// correct earlier spending, and the `Ledger` treats each one accordingly.
+///
+/// Stored in Firestore as [wireName]. Documents written before these kinds
+/// existed only ever contain "income" or "expense", which still read back
+/// exactly as before.
+enum TransactionType {
+  /// Money earned: salary, money received, gifts.
+  income('income', 'Income'),
+
+  /// Money spent on goods or services.
+  expense('expense', 'Expense'),
+
+  /// Money moved between two of your own accounts, e.g. a cash withdrawal
+  /// (M-Pesa to Cash). Neither income nor spending.
+  transfer('transfer', 'Transfer'),
+
+  /// Money put into savings. Not spending: it is still yours.
+  savingsContribution('savings_contribution', 'To savings'),
+
+  /// Money taken out of savings. Not income: you already had it.
+  savingsWithdrawal('savings_withdrawal', 'From savings'),
+
+  /// Money given back for an earlier purchase. Reduces spending in its
+  /// category instead of counting as income.
+  refund('refund', 'Refund'),
+
+  /// Paying back a loan (e.g. Fuliza). Only the interest part is spending;
+  /// the principal repays money you already counted when you spent it.
+  debtRepayment('debt_repayment', 'Debt repayment');
+
+  const TransactionType(this.wireName, this.label);
+
+  /// The value stored in Firestore.
+  final String wireName;
+
+  /// Name shown in the UI.
+  final String label;
+
+  /// The type for a stored value, or null if this version doesn't know it.
+  static TransactionType? fromWire(String? value) {
+    for (final type in values) {
+      if (type.wireName == value) return type;
+    }
+    return null;
+  }
+
+  /// True when the amount comes into the account it is recorded against.
+  bool get isMoneyIn =>
+      this == income || this == refund || this == savingsWithdrawal;
+}
+
+/// One of the places your money can be. A fixed list for now.
+enum Account {
+  mpesa('mpesa', 'M-Pesa'),
+  airtelMoney('airtel_money', 'Airtel Money'),
+  cash('cash', 'Cash'),
+  bank('bank', 'Bank'),
+
+  /// Money set aside. Only savings contributions and withdrawals move money
+  /// in and out of it, so it is never picked as a normal account.
+  savings('savings', 'Savings');
+
+  const Account(this.wireName, this.label);
+
+  final String wireName;
+  final String label;
+
+  static Account? fromWire(String? value) {
+    for (final account in values) {
+      if (account.wireName == value) return account;
+    }
+    return null;
+  }
+
+  /// The accounts a user can pick for spending, income and transfers.
+  static const List<Account> spendable = [mpesa, airtelMoney, cash, bank];
+}
 
 /// Where a transaction came from.
 ///
@@ -18,7 +97,8 @@ enum TransactionSource {
       };
 }
 
-/// A single income or expense entry.
+/// A single money movement: income, expense, transfer, savings, refund or
+/// debt repayment.
 ///
 /// Kept deliberately plain (no Firebase types); conversion to and from a
 /// Firestore document lives in `FirestoreTransactionRepository`.
@@ -34,13 +114,19 @@ class TransactionModel {
     this.source = TransactionSource.manual,
     this.reference,
     this.smsText,
+    this.account,
+    this.toAccount,
+    this.fee,
+    this.interest,
+    this.refundOf,
   });
 
   /// Firestore document id. Empty for a transaction that hasn't been saved.
   final String id;
   final String description;
 
-  /// Always stored as a positive number; [type] decides the sign.
+  /// Always stored as a positive number; [type] decides what it means.
+  /// Does not include [fee].
   final double amount;
   final TransactionType type;
   final String categoryId;
@@ -58,9 +144,42 @@ class TransactionModel {
   /// the parser read. Only set for detected transactions.
   final String? smsText;
 
+  /// The account the money left (expense, transfer, savings contribution,
+  /// debt repayment) or arrived in (income, refund, savings withdrawal).
+  /// Null on transactions saved before accounts existed; see
+  /// [effectiveAccount].
+  final Account? account;
+
+  /// For a [TransactionType.transfer]: the account the money went to.
+  final Account? toAccount;
+
+  /// Charge paid to the provider on top of [amount] (e.g. the M-Pesa
+  /// transaction cost), taken from [account]. Counted as spending.
+  final double? fee;
+
+  /// For a [TransactionType.debtRepayment]: how much of [amount] was
+  /// interest or charges. Null when unknown, in which case the whole
+  /// repayment is treated as principal.
+  final double? interest;
+
+  /// For a [TransactionType.refund]: the id of the purchase it refunds, if
+  /// the user linked one.
+  final String? refundOf;
+
   bool get isExpense => type == TransactionType.expense;
   bool get isIncome => type == TransactionType.income;
   bool get isDetected => source != TransactionSource.manual;
+
+  /// [account], or for older transactions without one, the account implied
+  /// by where they were detected (an M-Pesa SMS means M-Pesa). Null for
+  /// older manual entries.
+  Account? get effectiveAccount =>
+      account ??
+      switch (source) {
+        TransactionSource.mpesa => Account.mpesa,
+        TransactionSource.airtel => Account.airtelMoney,
+        TransactionSource.manual => null,
+      };
 
   /// A copy with [id] replaced (used when a repository assigns one).
   TransactionModel withId(String id) => TransactionModel(
@@ -74,5 +193,10 @@ class TransactionModel {
         source: source,
         reference: reference,
         smsText: smsText,
+        account: account,
+        toAccount: toAccount,
+        fee: fee,
+        interest: interest,
+        refundOf: refundOf,
       );
 }

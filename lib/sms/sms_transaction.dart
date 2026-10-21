@@ -18,15 +18,7 @@ enum SmsTransactionKind {
   deposit,
 
   /// Bought airtime or a data bundle.
-  airtime;
-
-  /// Money in or money out, as PennyWise records it.
-  TransactionType get type => switch (this) {
-        SmsTransactionKind.received ||
-        SmsTransactionKind.deposit =>
-          TransactionType.income,
-        _ => TransactionType.expense,
-      };
+  airtime,
 }
 
 /// Everything the parser could read from one transaction SMS.
@@ -75,7 +67,36 @@ class SmsTransaction {
   /// The original SMS with long digit runs (phone / account numbers) masked.
   final String maskedText;
 
-  TransactionType get type => kind.type;
+  /// Savings products whose name appears as the other party, e.g.
+  /// "Ksh500.00 sent to ZIIDI" or "received Ksh500.00 from ZIIDI".
+  /// Matched against the upper-cased name with spaces and dashes removed.
+  static const savingsProducts = ['ZIIDI', 'MSHWARI', 'LOCKSAVINGS'];
+
+  /// True when the other party is one of the [savingsProducts].
+  bool get isSavingsProduct {
+    final name =
+        (counterparty ?? '').toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+    return savingsProducts.any(name.contains);
+  }
+
+  /// How PennyWise records it:
+  /// * cash withdrawal / deposit at an agent: a transfer between the
+  ///   mobile-money account and Cash, not spending or income;
+  /// * money sent to / received from a savings product: a savings
+  ///   contribution / withdrawal;
+  /// * anything else received: income; anything else paid or sent: expense.
+  TransactionType get type => switch (kind) {
+        SmsTransactionKind.withdrawal ||
+        SmsTransactionKind.deposit =>
+          TransactionType.transfer,
+        SmsTransactionKind.received when isSavingsProduct =>
+          TransactionType.savingsWithdrawal,
+        SmsTransactionKind.received => TransactionType.income,
+        SmsTransactionKind.payment ||
+        SmsTransactionKind.sent when isSavingsProduct =>
+          TransactionType.savingsContribution,
+        _ => TransactionType.expense,
+      };
 
   /// Unique per real-world transaction: source + transaction code.
   /// Used as the Firestore document id, e.g. "mpesa_SJK3ABC123".

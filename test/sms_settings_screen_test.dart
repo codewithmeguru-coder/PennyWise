@@ -87,7 +87,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Amount'), '200');
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Description'), 'Bread');
-    await tester.tap(find.text('Food'));
+    await scrollAndTap(tester, 'Food');
     await scrollAndTap(tester, 'Save transaction');
 
     expect(repo.items.single.description, 'Bread');

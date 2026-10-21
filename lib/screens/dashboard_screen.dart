@@ -92,6 +92,7 @@ class DashboardScreen extends StatelessWidget {
                 children: [
                   BalanceCard(
                     balance: store.balance,
+                    savings: store.savingsBalance,
                     monthIncome: store.monthIncome,
                     monthExpenses: store.monthExpenses,
                   ),

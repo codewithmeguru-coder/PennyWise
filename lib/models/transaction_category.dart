@@ -6,6 +6,7 @@ import 'transaction_model.dart';
 ///
 /// Each category is tied to one [TransactionType] so the add form only shows
 /// expense categories for expenses and income categories for income.
+/// Transfers, savings and debt repayments each have one fixed category.
 class TransactionCategory {
   const TransactionCategory({
     required this.id,
@@ -86,6 +87,14 @@ class DefaultCategories {
       icon: Icons.local_atm_rounded,
       type: TransactionType.expense,
     ),
+    // Provider charges (e.g. the M-Pesa transaction cost). Fees are stored on
+    // the transaction they were charged for; the Ledger reports them here.
+    TransactionCategory(
+      id: 'fees',
+      name: 'Transaction fees',
+      icon: Icons.request_quote_rounded,
+      type: TransactionType.expense,
+    ),
     TransactionCategory(
       id: 'other_expense',
       name: 'Other',
@@ -143,11 +152,72 @@ class DefaultCategories {
       icon: Icons.help_outline_rounded,
       type: TransactionType.income,
     ),
+    // One fixed category each for the kinds that aren't earning or spending.
+    TransactionCategory(
+      id: 'transfer',
+      name: 'Transfer',
+      icon: Icons.swap_horiz_rounded,
+      type: TransactionType.transfer,
+    ),
+    TransactionCategory(
+      id: 'savings',
+      name: 'Savings',
+      icon: Icons.savings_rounded,
+      type: TransactionType.savingsContribution,
+    ),
+    TransactionCategory(
+      id: 'savings_withdrawal',
+      name: 'Savings withdrawal',
+      icon: Icons.account_balance_rounded,
+      type: TransactionType.savingsWithdrawal,
+    ),
+    TransactionCategory(
+      id: 'debt_repayment',
+      name: 'Debt repayment',
+      icon: Icons.credit_score_rounded,
+      type: TransactionType.debtRepayment,
+    ),
   ];
 
-  static List<TransactionCategory> forType(TransactionType type) =>
-      all.where((c) => c.type == type).toList();
+  /// Shown for a category id this version doesn't know (e.g. one added by a
+  /// newer version of the app), instead of guessing a wrong one.
+  static const unknown = TransactionCategory(
+    id: 'unknown',
+    name: 'Other',
+    icon: Icons.help_outline_rounded,
+    type: TransactionType.expense,
+  );
+
+  /// The categories the user can pick for [type]. A refund gives money back
+  /// for a purchase, so it uses the expense categories (not fees).
+  static List<TransactionCategory> forType(TransactionType type) {
+    final lookup =
+        type == TransactionType.refund ? TransactionType.expense : type;
+    return all
+        .where((c) => c.type == lookup && !(type == TransactionType.refund &&
+            c.id == 'fees'))
+        .toList();
+  }
+
+  /// True when [type] has a single fixed category, so the form doesn't ask.
+  static bool hasFixedCategory(TransactionType type) => switch (type) {
+        TransactionType.transfer ||
+        TransactionType.savingsContribution ||
+        TransactionType.savingsWithdrawal ||
+        TransactionType.debtRepayment =>
+          true,
+        _ => false,
+      };
+
+  /// The fixed category for [type] (see [hasFixedCategory]).
+  static String fixedCategoryFor(TransactionType type) => switch (type) {
+        TransactionType.transfer => 'transfer',
+        TransactionType.savingsContribution => 'savings',
+        TransactionType.savingsWithdrawal => 'savings_withdrawal',
+        TransactionType.debtRepayment => 'debt_repayment',
+        _ => throw ArgumentError('$type has no fixed category'),
+      };
 
   static TransactionCategory byId(String id) =>
-      all.firstWhere((c) => c.id == id, orElse: () => all.first);
+      all.firstWhere((c) => c.id == id, orElse: () => unknown);
 }

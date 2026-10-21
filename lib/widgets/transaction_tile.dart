@@ -16,10 +16,25 @@ class TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final category = DefaultCategories.byId(transaction.categoryId);
-    final color =
-        transaction.isExpense ? AppColors.expense : AppColors.income;
-    final sign = transaction.isExpense ? '-' : '+';
+    final t = transaction;
+    final category = DefaultCategories.byId(t.categoryId);
+    final (color, sign) = switch (t.type) {
+      TransactionType.income || TransactionType.refund => (AppColors.income, '+'),
+      TransactionType.expense ||
+      TransactionType.debtRepayment =>
+        (AppColors.expense, '-'),
+      // Moves between your own money: no sign, it wasn't earned or spent.
+      TransactionType.transfer => (AppColors.neutral, ''),
+      TransactionType.savingsContribution ||
+      TransactionType.savingsWithdrawal =>
+        (AppColors.savings, ''),
+    };
+    final accounts = switch (t.type) {
+      TransactionType.transfer when t.effectiveAccount != null &&
+              t.toAccount != null =>
+        '${t.effectiveAccount!.label} → ${t.toAccount!.label}',
+      _ => t.effectiveAccount?.label,
+    };
 
     return ListTile(
       onTap: onTap,
@@ -30,7 +45,7 @@ class TransactionTile extends StatelessWidget {
         child: Icon(category.icon, color: color, size: 22),
       ),
       title: Text(
-        transaction.description,
+        t.description,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
@@ -40,15 +55,19 @@ class TransactionTile extends StatelessWidget {
       ),
       subtitle: Text(
         [
-          category.name,
-          Formatters.relativeDate(transaction.date),
-          // e.g. "M-Pesa", so detected transactions are easy to spot.
-          if (transaction.isDetected) transaction.source.label,
+          // Refunds and savings say what they are, not just the category.
+          if (t.type == TransactionType.refund)
+            'Refund · ${category.name}'
+          else
+            category.name,
+          Formatters.relativeDate(t.date),
+          // e.g. "M-Pesa", or "M-Pesa → Cash" for a cash withdrawal.
+          ?accounts,
         ].join(' · '),
         style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
       ),
       trailing: Text(
-        '$sign${Formatters.currency(transaction.amount)}',
+        '$sign${Formatters.currency(t.amount)}',
         style: TextStyle(color: color, fontWeight: FontWeight.w700),
       ),
     );

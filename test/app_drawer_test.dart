@@ -74,7 +74,7 @@ void main() {
     expect(
         tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
         0);
-    expect(find.text('Total balance'), findsOneWidget);
+    expect(find.text('Available balance'), findsOneWidget);
   });
 
   testWidgets('Settings and Automatic Detection open the settings screen',

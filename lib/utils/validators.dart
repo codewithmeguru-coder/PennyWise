@@ -26,6 +26,10 @@ class Validators {
     return null;
   }
 
+  /// Like [amount], but empty is allowed (e.g. an optional fee).
+  static String? optionalAmount(String? value) =>
+      (value?.trim() ?? '').isEmpty ? null : amount(value);
+
   /// Required text of at most [max] UTF-16 code units once trimmed.
   ///
   /// That's the unit Firestore rules' `size()` counts (and Dart's

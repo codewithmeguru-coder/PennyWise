@@ -23,7 +23,7 @@ class TransactionDeleted extends TransactionFormResult {
   const TransactionDeleted(super.transaction);
 }
 
-/// Full-screen form for adding an income or expense, or editing one.
+/// Full-screen form for adding any kind of transaction, or editing one.
 ///
 /// It doesn't save anything itself: it closes and returns a
 /// [TransactionFormResult] via `Navigator.pop`, and the caller writes it to
@@ -43,11 +43,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   late final TextEditingController _amountController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _noteController;
+  late final TextEditingController _feeController;
+  late final TextEditingController _interestController;
 
   late TransactionType _type;
   String? _categoryId;
   bool _showCategoryError = false;
   late DateTime _date;
+
+  /// Null only for older transactions saved before accounts existed.
+  Account? _account;
+
+  /// Transfers only: where the money went.
+  Account? _toAccount;
 
   bool get _isEditing => widget.initial != null;
 
@@ -61,9 +69,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     _descriptionController =
         TextEditingController(text: initial?.description ?? '');
     _noteController = TextEditingController(text: initial?.note ?? '');
+    _feeController = TextEditingController(
+      text: initial?.fee == null ? '' : _formatAmount(initial!.fee!),
+    );
+    _interestController = TextEditingController(
+      text: initial?.interest == null ? '' : _formatAmount(initial!.interest!),
+    );
     _type = initial?.type ?? TransactionType.expense;
     _categoryId = initial?.categoryId;
     _date = initial?.date ?? DateTime.now();
+    // New entries start on M-Pesa, the most common account. Older entries
+    // keep "Not set" unless the SMS they came from says which account.
+    _account = initial == null ? Account.mpesa : initial.effectiveAccount;
+    _toAccount = initial?.toAccount;
   }
 
   /// 850.0 -> "850", 12.5 -> "12.50"
@@ -76,11 +94,48 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     _amountController.dispose();
     _descriptionController.dispose();
     _noteController.dispose();
+    _feeController.dispose();
+    _interestController.dispose();
     super.dispose();
   }
 
-  Color get _accent =>
-      _type == TransactionType.expense ? AppColors.expense : AppColors.income;
+  Color get _accent => switch (_type) {
+        TransactionType.income || TransactionType.refund => AppColors.income,
+        TransactionType.expense ||
+        TransactionType.debtRepayment =>
+          AppColors.expense,
+        TransactionType.transfer => AppColors.neutral,
+        TransactionType.savingsContribution ||
+        TransactionType.savingsWithdrawal =>
+          AppColors.savings,
+      };
+
+  /// Fees apply when money leaves an account through a provider.
+  bool get _hasFee => switch (_type) {
+        TransactionType.expense ||
+        TransactionType.transfer ||
+        TransactionType.savingsContribution ||
+        TransactionType.debtRepayment =>
+          true,
+        _ => false,
+      };
+
+  String get _accountLabel => switch (_type) {
+        TransactionType.income => 'Received into',
+        TransactionType.refund => 'Refunded to',
+        TransactionType.savingsWithdrawal => 'Moved to',
+        TransactionType.transfer => 'From account',
+        _ => 'Paid from',
+      };
+
+  void _selectType(TransactionType type) => setState(() {
+        _type = type;
+        _categoryId = DefaultCategories.hasFixedCategory(type)
+            ? DefaultCategories.fixedCategoryFor(type)
+            : null; // categories differ per type
+        _showCategoryError = false;
+        if (type != TransactionType.transfer) _toAccount = null;
+      });
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -101,14 +156,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ));
   }
 
+  static double? _optionalNumber(TextEditingController c) {
+    final text = c.text.trim();
+    return text.isEmpty ? null : double.parse(text);
+  }
+
   void _save() {
     final formValid = _formKey.currentState!.validate();
     setState(() => _showCategoryError = _categoryId == null);
     if (!formValid || _categoryId == null) return;
 
     final note = _noteController.text.trim();
+    final initial = widget.initial;
     final transaction = TransactionModel(
-      id: widget.initial?.id ?? '', // Firestore assigns ids to new ones
+      id: initial?.id ?? '', // Firestore assigns ids to new ones
       description: _descriptionController.text.trim(),
       amount: double.parse(_amountController.text.trim()),
       type: _type,
@@ -116,9 +177,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       date: _date,
       note: note.isEmpty ? null : note,
       // Keep where it came from when editing a detected transaction.
-      source: widget.initial?.source ?? TransactionSource.manual,
-      reference: widget.initial?.reference,
-      smsText: widget.initial?.smsText,
+      source: initial?.source ?? TransactionSource.manual,
+      reference: initial?.reference,
+      smsText: initial?.smsText,
+      account: _account,
+      toAccount: _type == TransactionType.transfer ? _toAccount : null,
+      fee: _hasFee ? _optionalNumber(_feeController) : null,
+      interest: _type == TransactionType.debtRepayment
+          ? _optionalNumber(_interestController)
+          : null,
+      refundOf: _type == TransactionType.refund ? initial?.refundOf : null,
     );
     Navigator.of(context).pop(TransactionSaved(transaction));
   }
@@ -147,9 +215,50 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
+  /// The types besides expense and income, offered as chips.
+  static const _otherTypes = [
+    TransactionType.transfer,
+    TransactionType.savingsContribution,
+    TransactionType.savingsWithdrawal,
+    TransactionType.refund,
+    TransactionType.debtRepayment,
+  ];
+
+  /// One line explaining how the chosen type affects the totals.
+  String? get _typeHelp => switch (_type) {
+        TransactionType.transfer => 'Moving your own money, e.g. withdrawing '
+            'cash. Not income or spending.',
+        TransactionType.savingsContribution =>
+          'Money set aside. Not counted as spending.',
+        TransactionType.savingsWithdrawal =>
+          'Money taken out of savings. Not counted as income.',
+        TransactionType.refund =>
+          'Money returned for a purchase. Reduces spending in its category.',
+        TransactionType.debtRepayment =>
+          'Paying back a loan. Only the interest counts as spending.',
+        _ => null,
+      };
+
+  String? _validateInterest(String? value) {
+    final error = Validators.optionalAmount(value);
+    if (error != null) return error;
+    final interest = double.tryParse(value?.trim() ?? '');
+    final amount = double.tryParse(_amountController.text.trim());
+    if (interest != null && amount != null && interest > amount) {
+      return "Can't be more than the amount repaid";
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final categories = DefaultCategories.forType(_type);
+    final fixedCategory = DefaultCategories.hasFixedCategory(_type);
+    // "Not set" is offered only for an older entry that has no account.
+    final accountChoices = <Account?>[
+      if (_isEditing && widget.initial!.effectiveAccount == null) null,
+      ...Account.spendable,
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -187,12 +296,40 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     icon: Icon(Icons.arrow_downward_rounded),
                   ),
                 ],
-                selected: {_type},
-                onSelectionChanged: (selection) => setState(() {
-                  _type = selection.first;
-                  _categoryId = null; // categories differ per type
-                }),
+                // Nothing highlighted while one of the other types is chosen.
+                emptySelectionAllowed: true,
+                selected: {
+                  if (_type == TransactionType.expense ||
+                      _type == TransactionType.income)
+                    _type,
+                },
+                onSelectionChanged: (selection) {
+                  if (selection.isNotEmpty) _selectType(selection.first);
+                },
               ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final type in _otherTypes)
+                    ChoiceChip(
+                      label: Text(type.label),
+                      selected: _type == type,
+                      onSelected: (_) => _selectType(type),
+                    ),
+                ],
+              ),
+              if (_typeHelp case final help?) ...[
+                const SizedBox(height: 8),
+                Text(
+                  help,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
               TextFormField(
                 controller: _amountController,
@@ -225,42 +362,112 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   max: 100, // same limit as the security rules
                 ),
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'Category',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final category in categories)
-                    ChoiceChip(
-                      avatar: Icon(category.icon, size: 18),
-                      label: Text(category.name),
-                      selected: _categoryId == category.id,
-                      onSelected: (_) => setState(() {
-                        _categoryId = category.id;
-                        _showCategoryError = false;
-                      }),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<Account?>(
+                key: ValueKey('account-$_type'),
+                initialValue: _account,
+                decoration: InputDecoration(labelText: _accountLabel),
+                items: [
+                  for (final a in accountChoices)
+                    DropdownMenuItem(
+                      value: a,
+                      child: Text(a?.label ?? 'Not set'),
                     ),
                 ],
+                onChanged: (a) => setState(() => _account = a),
+                validator: (a) => _type == TransactionType.transfer && a == null
+                    ? 'Choose where the money came from'
+                    : null,
               ),
-              if (_showCategoryError)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6, left: 4),
-                  child: Text(
-                    'Choose a category',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 12,
-                    ),
+              if (_type == TransactionType.transfer) ...[
+                const SizedBox(height: 16),
+                DropdownButtonFormField<Account>(
+                  key: const ValueKey('toAccount'),
+                  initialValue: _toAccount,
+                  decoration: const InputDecoration(labelText: 'To account'),
+                  items: [
+                    for (final a in Account.spendable)
+                      DropdownMenuItem(value: a, child: Text(a.label)),
+                  ],
+                  onChanged: (a) => setState(() => _toAccount = a),
+                  validator: (a) {
+                    if (a == null) return 'Choose where the money went';
+                    if (a == _account) return 'Pick a different account';
+                    return null;
+                  },
+                ),
+              ],
+              if (_hasFee) ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const ValueKey('fee'),
+                  controller: _feeController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Transaction cost (optional)',
+                    helperText: 'e.g. the M-Pesa charge. Counted as spending.',
+                    prefixText: '${Formatters.currencySymbol} ',
+                  ),
+                  validator: Validators.optionalAmount,
+                ),
+              ],
+              if (_type == TransactionType.debtRepayment) ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const ValueKey('interest'),
+                  controller: _interestController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Interest or charges included (optional)',
+                    helperText: 'Only this part counts as spending. Leave it '
+                        "empty if you don't know it.",
+                    prefixText: '${Formatters.currencySymbol} ',
+                  ),
+                  validator: _validateInterest,
+                ),
+              ],
+              if (!fixedCategory) ...[
+                const SizedBox(height: 20),
+                Text(
+                  _type == TransactionType.refund
+                      ? 'Category of the purchase refunded'
+                      : 'Category',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final category in categories)
+                      ChoiceChip(
+                        avatar: Icon(category.icon, size: 18),
+                        label: Text(category.name),
+                        selected: _categoryId == category.id,
+                        onSelected: (_) => setState(() {
+                          _categoryId = category.id;
+                          _showCategoryError = false;
+                        }),
+                      ),
+                  ],
+                ),
+                if (_showCategoryError)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, left: 4),
+                    child: Text(
+                      'Choose a category',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              ],
               const SizedBox(height: 20),
               InkWell(
                 onTap: _pickDate,

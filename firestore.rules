@@ -4,7 +4,7 @@ rules_version = '2';
 //
 // Data layout (everything a user owns lives under their own uid):
 //   users/{uid}                      profile: email, name, photo, timestamps
-//   users/{uid}/transactions/{id}    income / expense entries (manual, or
+//   users/{uid}/transactions/{id}    money movements of seven types (manual, or
 //                                    detected from an SMS; detected ones use
 //                                    "<source>_<code>" as the id, which is
 //                                    what prevents duplicates)
@@ -59,16 +59,48 @@ service cloud.firestore {
 
       // ---- users/{uid}/transactions/{transactionId} ----------------------
 
+      // Accounts a transaction can name ("savings" is only reached through
+      // the savings types, so it is never a from/to account).
+      function isSpendableAccount(value) {
+        return value in ['mpesa', 'airtel_money', 'cash', 'bank'];
+      }
+
       function isValidTransaction(data) {
         return data.keys().hasAll(
             ['amount', 'type', 'category', 'description', 'date',
              'createdAt', 'updatedAt'])
           && data.keys().hasOnly(
             ['amount', 'type', 'category', 'description', 'note', 'date',
-             'source', 'reference', 'smsText', 'createdAt', 'updatedAt'])
+             'source', 'reference', 'smsText', 'account', 'toAccount', 'fee',
+             'interest', 'refundOf', 'createdAt', 'updatedAt'])
           && data.amount is number
           && data.amount > 0 && data.amount < 1000000000
-          && data.type in ['income', 'expense']
+          // "income" and "expense" are what every older document holds.
+          && data.type in ['income', 'expense', 'transfer',
+                           'savings_contribution', 'savings_withdrawal',
+                           'refund', 'debt_repayment']
+          // All optional, so older documents stay valid.
+          && (!('account' in data) || isSpendableAccount(data.account))
+          // A transfer names both accounts, and they differ. Other types
+          // never have a toAccount.
+          && (data.type == 'transfer'
+              ? ('account' in data && 'toAccount' in data
+                 && isSpendableAccount(data.toAccount)
+                 && data.toAccount != data.account)
+              : !('toAccount' in data))
+          // Provider charge on top of the amount.
+          && (!('fee' in data)
+              || (data.fee is number && data.fee > 0
+                  && data.fee < 1000000000))
+          // Interest is part of a debt repayment, never more than it.
+          && (!('interest' in data)
+              || (data.type == 'debt_repayment' && data.interest is number
+                  && data.interest >= 0 && data.interest <= data.amount))
+          // Optional link from a refund to the purchase it refunds.
+          && (!('refundOf' in data)
+              || (data.type == 'refund' && data.refundOf is string
+                  && data.refundOf.size() > 0
+                  && data.refundOf.size() <= 128))
           && data.category is string
           && data.category.size() > 0 && data.category.size() <= 40
           && data.description is string

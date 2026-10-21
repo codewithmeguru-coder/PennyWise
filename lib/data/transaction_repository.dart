@@ -88,25 +88,45 @@ class FirestoreTransactionRepository implements TransactionRepository {
   }
 
   @override
-  Future<void> update(TransactionModel transaction) => _guard(() =>
-      _collection.doc(transaction.id).update({
-        ..._fields(transaction),
-        // update() merges, so clearing the note needs an explicit delete.
-        if (transaction.note == null) 'note': FieldValue.delete(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }));
+  Future<void> update(TransactionModel transaction) {
+    final fields = _fields(transaction);
+    return _guard(() => _collection.doc(transaction.id).update({
+          ...fields,
+          // update() merges, so clearing an optional field needs an explicit
+          // delete (e.g. a transfer edited into an expense drops toAccount).
+          for (final field in _optionalFields)
+            if (!fields.containsKey(field)) field: FieldValue.delete(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }));
+  }
 
   @override
   Future<void> delete(String id) => _guard(() => _collection.doc(id).delete());
 
+  /// Fields the user can clear by editing; see [update].
+  static const _optionalFields = [
+    'note', 'account', 'toAccount', 'fee', 'interest', 'refundOf',
+  ];
+
   /// The user-editable fields, in their Firestore types.
+  ///
+  /// Optional fields are left out when empty, so an income or expense
+  /// without an account is written exactly like before accounts existed.
   static Map<String, dynamic> _fields(TransactionModel t) => {
         'amount': t.amount, // number (double)
-        'type': t.type.name, // "income" | "expense"
+        'type': t.type.wireName, // e.g. "expense", "savings_contribution"
         'category': t.categoryId,
         'description': t.description,
         if (t.note != null) 'note': t.note,
         'date': Timestamp.fromDate(t.date),
+        if (t.account != null) 'account': t.account!.wireName,
+        if (t.type == TransactionType.transfer && t.toAccount != null)
+          'toAccount': t.toAccount!.wireName,
+        if (t.fee != null && t.fee! > 0) 'fee': t.fee,
+        if (t.type == TransactionType.debtRepayment && t.interest != null)
+          'interest': t.interest,
+        if (t.type == TransactionType.refund && t.refundOf != null)
+          'refundOf': t.refundOf,
         // Only detected transactions carry these. Manual ones leave them out,
         // so documents written before this feature existed stay unchanged.
         if (t.isDetected) 'source': t.source.name, // "mpesa" | "airtel"
@@ -119,11 +139,17 @@ class FirestoreTransactionRepository implements TransactionRepository {
       QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     try {
       final data = doc.data();
+      final type = TransactionType.fromWire(data['type'] as String?);
+      if (type == null) {
+        // Written by a newer version of the app; skip rather than misread.
+        debugPrint('Skipping transaction ${doc.id} of unknown type');
+        return null;
+      }
       return TransactionModel(
         id: doc.id,
         description: data['description'] as String,
         amount: (data['amount'] as num).toDouble(),
-        type: TransactionType.values.byName(data['type'] as String),
+        type: type,
         categoryId: data['category'] as String,
         date: (data['date'] as Timestamp).toDate(),
         note: data['note'] as String?,
@@ -133,6 +159,12 @@ class FirestoreTransactionRepository implements TransactionRepository {
             TransactionSource.manual,
         reference: data['reference'] as String?,
         smsText: data['smsText'] as String?,
+        // All missing on documents saved before accounts existed.
+        account: Account.fromWire(data['account'] as String?),
+        toAccount: Account.fromWire(data['toAccount'] as String?),
+        fee: (data['fee'] as num?)?.toDouble(),
+        interest: (data['interest'] as num?)?.toDouble(),
+        refundOf: data['refundOf'] as String?,
       );
     } catch (e) {
       debugPrint('Skipping malformed transaction ${doc.id}: $e');

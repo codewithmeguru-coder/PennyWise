@@ -3,17 +3,23 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
-/// The green hero card at the top of the dashboard showing the total balance
-/// plus this month's income and expenses.
+/// The green hero card at the top of the dashboard: money available to
+/// spend, money in savings (kept separate), and this month's income and
+/// spending.
 class BalanceCard extends StatelessWidget {
   const BalanceCard({
     super.key,
     required this.balance,
+    this.savings = 0,
     required this.monthIncome,
     required this.monthExpenses,
   });
 
+  /// Money available to spend (every account except savings).
   final double balance;
+
+  /// Money in savings. The row is hidden while it is zero.
+  final double savings;
   final double monthIncome;
   final double monthExpenses;
 
@@ -34,7 +40,7 @@ class BalanceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Total balance',
+            'Available balance',
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
           const SizedBox(height: 6),
@@ -46,6 +52,20 @@ class BalanceCard extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
+          if (savings != 0) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.savings_rounded,
+                    size: 16, color: Colors.white70),
+                const SizedBox(width: 6),
+                Text(
+                  'Savings ${Formatters.currency(savings)}',
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 20),
           Row(
             children: [

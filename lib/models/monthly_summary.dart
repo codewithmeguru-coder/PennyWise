@@ -1,3 +1,4 @@
+import 'ledger.dart';
 import 'transaction_model.dart';
 
 /// Total spent in one expense category during a month.
@@ -27,18 +28,17 @@ enum BudgetStatus {
   over,
 }
 
-/// Income, expenses, budget and category totals for one calendar month.
+/// Income, spending, budget and category totals for one calendar month.
 ///
 /// Pure calculation: give it the user's transactions, a month and
-/// (optionally) that month's budget.
+/// (optionally) that month's budget. The money rules (what counts as
+/// spending, what is only a transfer or savings) live in [Ledger].
 class MonthlySummary {
   MonthlySummary._({
     required this.month,
-    required this.income,
-    required this.expenses,
+    required this.ledger,
     required this.budget,
     required this.byCategory,
-    required this.transactionCount,
   });
 
   /// Budgets turn "near limit" at 80% used.
@@ -53,65 +53,60 @@ class MonthlySummary {
     // time. DateTime(year, 13) rolls over to January of the next year.
     final start = DateTime(month.year, month.month);
     final end = DateTime(month.year, month.month + 1);
-    final inMonth = transactions
-        .where((t) => !t.date.isBefore(start) && t.date.isBefore(end))
-        .toList();
+    final ledger = Ledger.of(transactions
+        .where((t) => !t.date.isBefore(start) && t.date.isBefore(end)));
 
-    // Sum in whole cents so 0.1 + 0.2 is exactly 0.30, not 0.30000000000000004.
-    var incomeCents = 0;
-    var expenseCents = 0;
-    final categoryCents = <String, int>{};
-    for (final t in inMonth) {
-      final cents = toCents(t.amount);
-      if (t.isIncome) {
-        incomeCents += cents;
-      } else {
-        expenseCents += cents;
-        categoryCents.update(t.categoryId, (c) => c + cents,
-            ifAbsent: () => cents);
-      }
-    }
-
+    // Shares are of the positive categories only, so they add up to 100%
+    // even when a refund pushed another category below zero. Categories that
+    // round to 0 cents are skipped: they'd draw nothing and, if they were
+    // the only spending, would divide 0 by 0.
+    final categories = ledger.spendingByCategory;
+    final total = categories.fold(0, (sum, e) => sum + e.value);
     final byCategory = [
-      // Skip categories that round to 0 cents (e.g. 0.001 written by another
-      // client): they'd draw nothing and, if they were the only spending,
-      // would divide 0 by 0.
-      for (final entry in categoryCents.entries)
-        if (entry.value > 0)
-          CategorySpend(
-            categoryId: entry.key,
-            amount: fromCents(entry.value),
-            share: entry.value / expenseCents,
-          ),
-    ]..sort((a, b) => b.amount.compareTo(a.amount)); // largest first
+      for (final entry in categories)
+        CategorySpend(
+          categoryId: entry.key,
+          amount: fromCents(entry.value),
+          share: entry.value / total,
+        ),
+    ];
 
     return MonthlySummary._(
       month: start,
-      income: fromCents(incomeCents),
-      expenses: fromCents(expenseCents),
+      ledger: ledger,
       budget: budget,
       byCategory: byCategory,
-      transactionCount: inMonth.length,
     );
   }
 
+  /// The month's full totals (savings, fees, refunds, accounts...).
+  final Ledger ledger;
+
   final DateTime month;
-  final double income;
-  final double expenses;
+
+  /// Money earned in the month.
+  double get income => ledger.income;
+
+  /// What the month cost: expenses + fees + interest − refunds. Transfers,
+  /// savings and loan principal are not included.
+  double get expenses => ledger.spending;
 
   /// The month's budget, or null if none is set.
   final double? budget;
 
-  /// Expenses grouped by category, largest first. Empty if no expenses.
+  /// Spending grouped by category, largest first. Empty if no spending.
   final List<CategorySpend> byCategory;
 
-  /// Number of transactions (income and expense) in the month.
-  final int transactionCount;
+  /// Number of transactions of any type in the month.
+  int get transactionCount => ledger.transactionCount;
+
+  /// Money moved into savings minus money taken out, this month.
+  double get netSaved => ledger.netSaved;
 
   bool get hasBudget => budget != null;
 
-  /// Income minus expenses. Negative if the month cost more than it earned.
-  double get net => fromCents(toCents(income) - toCents(expenses));
+  /// Income minus spending. Negative if the month cost more than it earned.
+  double get net => ledger.net;
 
   /// Budget minus expenses. Negative when over budget; null without a budget.
   double? get remaining =>
@@ -128,6 +123,6 @@ class MonthlySummary {
     return BudgetStatus.onTrack;
   }
 
-  static int toCents(double amount) => (amount * 100).round();
-  static double fromCents(int cents) => cents / 100;
+  static int toCents(double amount) => Ledger.toCents(amount);
+  static double fromCents(int cents) => Ledger.fromCents(cents);
 }

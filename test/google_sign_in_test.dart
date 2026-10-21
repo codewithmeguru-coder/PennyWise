@@ -30,7 +30,7 @@ void main() {
     await scrollAndTap(tester, 'Continue with Google');
 
     expect(auth.googleCalls, 1);
-    expect(find.text('Total balance'), findsOneWidget);
+    expect(find.text('Available balance'), findsOneWidget);
     expect(find.text('Welcome back'), findsNothing);
   });
 
@@ -43,7 +43,7 @@ void main() {
     await scrollAndTap(tester, 'Continue with Google');
 
     expect(find.text('Create your account'), findsNothing);
-    expect(find.text('Total balance'), findsOneWidget);
+    expect(find.text('Available balance'), findsOneWidget);
   });
 
   testWidgets('closing the Google picker is not an error', (tester) async {

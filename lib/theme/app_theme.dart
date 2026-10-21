@@ -16,6 +16,12 @@ class AppColors {
   static const Color income = Color(0xFF1B8A5A);
   static const Color expense = Color(0xFFD64545);
 
+  /// Transfers between your own accounts: neither earned nor spent.
+  static const Color neutral = Color(0xFF5B6B8C);
+
+  /// Money moved into or out of savings.
+  static const Color savings = Color(0xFF2F7DB5);
+
   /// Budget status: nearing the limit (always paired with an icon + label).
   static const Color warning = Color(0xFFD98E04);
 

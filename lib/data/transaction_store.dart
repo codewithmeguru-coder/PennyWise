@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/ledger.dart';
 import '../models/monthly_summary.dart';
 import '../models/transaction_model.dart';
 import 'data_exception.dart';
@@ -37,11 +38,15 @@ class TransactionStore extends ChangeNotifier {
   List<TransactionModel> recent({int count = 5}) =>
       _transactions.take(count).toList();
 
-  double get totalIncome => _sum(_transactions, TransactionType.income);
-  double get totalExpenses => _sum(_transactions, TransactionType.expense);
-  double get balance => MonthlySummary.fromCents(
-      MonthlySummary.toCents(totalIncome) -
-          MonthlySummary.toCents(totalExpenses));
+  /// All-time totals. Recomputed only when the transactions change.
+  Ledger get ledger => _ledger ??= Ledger.of(_transactions);
+  Ledger? _ledger;
+
+  /// Money you can spend now (all accounts except savings).
+  double get balance => ledger.available;
+
+  /// Money set aside in savings.
+  double get savingsBalance => ledger.savingsBalance;
 
   /// Totals for [month] (only the month and year are used).
   MonthlySummary summaryFor(DateTime month, {double? budget}) =>
@@ -81,6 +86,7 @@ class TransactionStore extends ChangeNotifier {
     _subscription = _repository.watchAll().listen(
       (items) {
         _transactions = List.unmodifiable(items);
+        _ledger = null;
         _isLoading = false;
         _error = null;
         notifyListeners();
@@ -98,10 +104,4 @@ class TransactionStore extends ChangeNotifier {
     _subscription?.cancel();
     super.dispose();
   }
-
-  /// Summed in whole cents, like [MonthlySummary], to avoid float drift.
-  static double _sum(List<TransactionModel> items, TransactionType type) =>
-      MonthlySummary.fromCents(items
-          .where((t) => t.type == type)
-          .fold(0, (total, t) => total + MonthlySummary.toCents(t.amount)));
 }

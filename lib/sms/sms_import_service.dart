@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/data_exception.dart';
+import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
-import '../utils/formatters.dart';
 import 'sms_categorizer.dart';
 import 'sms_gateway.dart';
 import 'sms_parser.dart';
@@ -179,28 +179,44 @@ class SmsImportService extends ChangeNotifier {
 
   /// Builds the transaction that gets saved, from a parsed SMS.
   static TransactionModel toTransaction(SmsTransaction t) {
+    final type = t.type;
+    final isCashMove = type == TransactionType.transfer;
     final details = [
       if (t.account != null) 'Account: ${SmsParser.maskDigits(t.account!)}',
-      if (t.fee != null && t.fee! > 0)
-        'Transaction cost: ${Formatters.currency(t.fee!)}',
+      if (isCashMove && t.counterparty != null) 'Agent: ${t.counterparty}',
     ];
     final smsText = t.maskedText.length > 1000
         ? t.maskedText.substring(0, 1000)
         : t.maskedText;
+    // The mobile-money wallet the SMS is about.
+    final wallet = t.source == TransactionSource.airtel
+        ? Account.airtelMoney
+        : Account.mpesa;
+    final isDeposit = t.kind == SmsTransactionKind.deposit;
     return TransactionModel(
       description: _description(t),
       amount: t.amount,
-      type: t.type,
-      categoryId: SmsCategorizer.categorize(t),
+      type: type,
+      categoryId: DefaultCategories.hasFixedCategory(type)
+          ? DefaultCategories.fixedCategoryFor(type)
+          : SmsCategorizer.categorize(t),
       date: t.date,
       note: details.isEmpty ? null : details.join('\n'),
       source: t.source,
       reference: t.reference,
       smsText: smsText,
+      // A deposit moves cash into the wallet; a withdrawal the other way.
+      account: isCashMove && isDeposit ? Account.cash : wallet,
+      toAccount: isCashMove ? (isDeposit ? wallet : Account.cash) : null,
+      // The provider's charge, stored as a number so it counts as spending.
+      fee: (t.fee ?? 0) > 0 ? t.fee : null,
     );
   }
 
   static String _description(SmsTransaction t) {
+    // Agent names say little about the transaction; the note keeps them.
+    if (t.kind == SmsTransactionKind.withdrawal) return 'Cash withdrawal';
+    if (t.kind == SmsTransactionKind.deposit) return 'Cash deposit';
     final name = t.counterparty;
     if (name != null && name.isNotEmpty) {
       return name.length > 100 ? name.substring(0, 100) : name;

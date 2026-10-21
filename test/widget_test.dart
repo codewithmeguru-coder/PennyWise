@@ -13,7 +13,7 @@ void main() {
       (WidgetTester tester) async {
     await pumpApp(tester);
 
-    expect(find.text('Total balance'), findsOneWidget);
+    expect(find.text('Available balance'), findsOneWidget);
     expect(find.text('KSh 64,150.00'), findsOneWidget); // 65,000 - 850
     expect(find.text('Recent transactions'), findsOneWidget);
     expect(find.text('Lunch'), findsOneWidget);
@@ -71,7 +71,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Amount'), '1250.50');
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Description'), 'Groceries');
-    await tester.tap(find.text('Shopping'));
+    await scrollAndTap(tester, 'Shopping');
     await scrollAndTap(tester, 'Save transaction');
 
     expect(repo.items, hasLength(1));
@@ -149,7 +149,7 @@ void main() {
     await pumpApp(tester, auth: FakeAuthService());
 
     expect(find.text('Welcome back'), findsOneWidget);
-    expect(find.text('Total balance'), findsNothing);
+    expect(find.text('Available balance'), findsNothing);
   });
 
   testWidgets('Login validates empty input', (WidgetTester tester) async {
@@ -172,7 +172,7 @@ void main() {
     await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Total balance'), findsOneWidget);
+    expect(find.text('Available balance'), findsOneWidget);
   });
 
   testWidgets('Login shows a friendly error on failure',
@@ -216,7 +216,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Create your account'), findsNothing);
-    expect(find.text('Total balance'), findsOneWidget);
+    expect(find.text('Available balance'), findsOneWidget);
   });
 
   testWidgets('Sign out returns to the login screen',

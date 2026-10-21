@@ -6,9 +6,12 @@ import '../widgets/empty_state.dart';
 import '../widgets/transaction_tile.dart';
 
 /// Which transactions the list is showing.
-enum _Filter { all, income, expense }
+enum _Filter { all, income, expense, moves }
 
-/// Transactions tab: the full list with a simple All / Income / Expense filter.
+/// Transactions tab: the full list with an All / Income / Expenses /
+/// Transfers filter. "Expenses" includes debt repayments and refunds (which
+/// change spending); "Transfers" covers transfers and savings, which move
+/// your own money without earning or spending it.
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({
     super.key,
@@ -39,7 +42,25 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       case _Filter.income:
         return items.where((t) => t.isIncome).toList();
       case _Filter.expense:
-        return items.where((t) => t.isExpense).toList();
+        return items
+            .where((t) => switch (t.type) {
+                  TransactionType.expense ||
+                  TransactionType.debtRepayment ||
+                  TransactionType.refund =>
+                    true,
+                  _ => false,
+                })
+            .toList();
+      case _Filter.moves:
+        return items
+            .where((t) => switch (t.type) {
+                  TransactionType.transfer ||
+                  TransactionType.savingsContribution ||
+                  TransactionType.savingsWithdrawal =>
+                    true,
+                  _ => false,
+                })
+            .toList();
     }
   }
 
@@ -70,6 +91,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   ButtonSegment(
                     value: _Filter.expense,
                     label: Text('Expenses'),
+                  ),
+                  ButtonSegment(
+                    value: _Filter.moves,
+                    label: Text('Transfers'),
                   ),
                 ],
                 selected: {_filter},
