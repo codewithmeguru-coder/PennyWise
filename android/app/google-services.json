@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "240925304261",
+    "project_id": "pennywise-b986a",
+    "storage_bucket": "pennywise-b986a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:240925304261:android:82e0d05db2e5a4790997ac",
+        "android_client_info": {
+          "package_name": "com.example.pennywise"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "240925304261-vjjje6q7agr4lil679200ba2s181caqq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pennywise",
+            "certificate_hash": "8f31fe62faeff957705854186a1e8f1c7c281450"
+          }
+        },
+        {
+          "client_id": "240925304261-l5q4f17i9g6ok5b9is3fvdf8p8764oqi.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2-XvKft7rW-VxD6LWNLL_MO3BGPX3_2c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "240925304261-l5q4f17i9g6ok5b9is3fvdf8p8764oqi.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "240925304261-fl8mbso5ifsnph5r4icisu367hdbj4hq.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pennywise"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

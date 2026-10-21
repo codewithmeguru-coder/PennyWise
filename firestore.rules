@@ -1,0 +1,122 @@
+rules_version = '2';
+
+// PennyWise security rules.
+//
+// Data layout (everything a user owns lives under their own uid):
+//   users/{uid}                      profile: email, name, photo, timestamps
+//   users/{uid}/transactions/{id}    income / expense entries (manual, or
+//                                    detected from an SMS; detected ones use
+//                                    "<source>_<code>" as the id, which is
+//                                    what prevents duplicates)
+//   users/{uid}/budgets/{YYYY-MM}    overall spending limit per month
+//
+// Anything not matched below is denied.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Server timestamps written by FieldValue.serverTimestamp() equal
+    // request.time, so clients can't backdate or forge them.
+    function stampedNow(field) {
+      return request.resource.data[field] == request.time;
+    }
+
+    function createdAtUnchanged() {
+      return request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // ---- users/{uid} -----------------------------------------------------
+
+    function isValidProfile(data) {
+      return data.keys().hasAll(['email', 'createdAt', 'updatedAt'])
+        // hasOnly() is what keeps passwords (or anything else) out.
+        && data.keys().hasOnly(
+            ['email', 'displayName', 'photoUrl', 'createdAt', 'updatedAt'])
+        && data.email == request.auth.token.email
+        && (!('displayName' in data)
+            || data.displayName == null
+            || (data.displayName is string && data.displayName.size() <= 100))
+        // Google profile picture; null for email/password accounts.
+        && (!('photoUrl' in data)
+            || data.photoUrl == null
+            || (data.photoUrl is string
+                && data.photoUrl.size() <= 2048
+                && data.photoUrl.matches('^https://.+')))
+        && data.createdAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read, delete: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && isValidProfile(request.resource.data)
+        && stampedNow('createdAt') && stampedNow('updatedAt');
+      allow update: if isOwner(userId)
+        && isValidProfile(request.resource.data)
+        && createdAtUnchanged() && stampedNow('updatedAt');
+
+      // ---- users/{uid}/transactions/{transactionId} ----------------------
+
+      function isValidTransaction(data) {
+        return data.keys().hasAll(
+            ['amount', 'type', 'category', 'description', 'date',
+             'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(
+            ['amount', 'type', 'category', 'description', 'note', 'date',
+             'source', 'reference', 'smsText', 'createdAt', 'updatedAt'])
+          && data.amount is number
+          && data.amount > 0 && data.amount < 1000000000
+          && data.type in ['income', 'expense']
+          && data.category is string
+          && data.category.size() > 0 && data.category.size() <= 40
+          && data.description is string
+          && data.description.size() > 0 && data.description.size() <= 100
+          && (!('note' in data)
+              || (data.note is string && data.note.size() <= 500))
+          // Set only on transactions detected from an M-Pesa / Airtel Money
+          // SMS (Android). Manual entries don't have them.
+          && (!('source' in data) || data.source in ['mpesa', 'airtel'])
+          && (!('reference' in data)
+              || (data.reference is string
+                  && data.reference.size() > 0
+                  && data.reference.size() <= 40))
+          && (!('smsText' in data)
+              || (data.smsText is string && data.smsText.size() <= 1000))
+          && data.date is timestamp
+          && data.createdAt is timestamp;
+      }
+
+      match /transactions/{transactionId} {
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidTransaction(request.resource.data)
+          && stampedNow('createdAt') && stampedNow('updatedAt');
+        allow update: if isOwner(userId)
+          && isValidTransaction(request.resource.data)
+          && createdAtUnchanged() && stampedNow('updatedAt');
+      }
+
+      // ---- users/{uid}/budgets/{monthId} ---------------------------------
+
+      function isValidBudget(data, monthId) {
+        return data.keys().hasAll(['month', 'limit', 'updatedAt'])
+          && data.keys().hasOnly(['month', 'limit', 'updatedAt'])
+          // The document id is the month ("YYYY-MM"), so there's one budget
+          // per month.
+          && monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && data.month == monthId
+          && data.limit is number
+          && data.limit > 0 && data.limit < 1000000000;
+      }
+
+      match /budgets/{monthId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidBudget(request.resource.data, monthId)
+          && stampedNow('updatedAt');
+      }
+    }
+  }
+}
