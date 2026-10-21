@@ -232,6 +232,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
+  /// For an entry still saved with an old cash category: true for a cash
+  /// withdrawal, false for a deposit; otherwise null.
+  bool? get _oldCashCategory => switch ((_type, _categoryId)) {
+        (TransactionType.expense, 'cash_withdrawal') => true,
+        (TransactionType.income, 'cash_deposit') => false,
+        _ => null,
+      };
+
   /// The types besides expense and income, offered as chips.
   static const _otherTypes = [
     TransactionType.transfer,
@@ -305,6 +313,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   _DetectedInfo(transaction: t),
                   const SizedBox(height: 16),
                 ],
+                if (_oldCashCategory case final withdrawal?) ...[
+                  _ConvertCashCard(
+                    withdrawal: withdrawal,
+                    onConvert: () => _recordCashMove(withdrawal: withdrawal),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 SegmentedButton<TransactionType>(
                   showSelectedIcon: false,
                   segments: const [
@@ -340,6 +355,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         label: Text(type.label),
                         selected: _type == type,
                         onSelected: (_) => _selectType(type),
+                      ),
+                    // Cash at an agent is a transfer, not spending or income.
+                    if (_type == TransactionType.expense ||
+                        _type == TransactionType.income)
+                      ActionChip(
+                        avatar: const Icon(Icons.swap_horiz_rounded, size: 18),
+                        label: Text(_type == TransactionType.expense
+                            ? 'Cash withdrawal → Transfer'
+                            : 'Cash deposit → Transfer'),
+                        onPressed: () => _recordCashMove(
+                            withdrawal: _type == TransactionType.expense),
                       ),
                   ],
                 ),
@@ -490,19 +516,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         ),
                       ),
                     ),
-                  // Cash at an agent is a transfer, not spending or income.
-                  if (_type == TransactionType.expense ||
-                      _type == TransactionType.income) ...[
-                    const SizedBox(height: 12),
-                    ActionChip(
-                      avatar: const Icon(Icons.swap_horiz_rounded, size: 18),
-                      label: Text(_type == TransactionType.expense
-                          ? 'Cash withdrawal → Transfer'
-                          : 'Cash deposit → Transfer'),
-                      onPressed: () => _recordCashMove(
-                          withdrawal: _type == TransactionType.expense),
-                    ),
-                  ],
                 ],
                 const SizedBox(height: 20),
                 InkWell(
@@ -584,6 +597,58 @@ class _DetectedInfo extends StatelessWidget {
             SelectableText(
               sms ?? 'Not available.',
               style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown when editing an entry saved before cash withdrawals and deposits
+/// became transfers, offering to convert it in place.
+class _ConvertCashCard extends StatelessWidget {
+  const _ConvertCashCard({required this.withdrawal, required this.onConvert});
+
+  final bool withdrawal;
+  final VoidCallback onConvert;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      color: AppColors.warning.withValues(alpha: 0.10),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              withdrawal
+                  ? 'Saved as an expense'
+                  : 'Saved as income',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              withdrawal
+                  ? 'A cash withdrawal moves your money from M-Pesa to Cash. '
+                      'As a transfer, only its fee counts as spending.'
+                  : 'A cash deposit moves your money from Cash to M-Pesa. '
+                      'As a transfer, it is not counted as income.',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: onConvert,
+              icon: const Icon(Icons.swap_horiz_rounded),
+              label: const Text('Convert to transfer'),
             ),
           ],
         ),

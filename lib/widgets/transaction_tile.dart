@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/ledger.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../theme/app_theme.dart';
@@ -66,10 +67,55 @@ class TransactionTile extends StatelessWidget {
         ].join(' · '),
         style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
       ),
-      trailing: Text(
-        '$sign${Formatters.currency(t.amount)}',
-        style: TextStyle(color: color, fontWeight: FontWeight.w700),
-      ),
+      trailing: _Amount(transaction: t, sign: sign, color: color),
     );
   }
+}
+
+/// The amount column. With a fee (e.g. the M-Pesa charge), spending shows
+/// what left your account in total, and a transfer shows the amount moved
+/// plus the fee on a second line, so the fee is visible but never added
+/// twice.
+class _Amount extends StatelessWidget {
+  const _Amount({
+    required this.transaction,
+    required this.sign,
+    required this.color,
+  });
+
+  final TransactionModel transaction;
+  final String sign;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = transaction;
+    final fee = t.fee ?? 0;
+    if (fee <= 0) return _line('$sign${Formatters.currency(t.amount)}');
+
+    // Expenses and debt repayments: the fee is part of what they cost.
+    final spending = t.type == TransactionType.expense ||
+        t.type == TransactionType.debtRepayment;
+    final main = spending
+        ? Ledger.fromCents(Ledger.toCents(t.amount) + Ledger.toCents(fee))
+        : t.amount;
+    final feeText = Formatters.currency(fee);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _line('$sign${Formatters.currency(main)}'),
+        Text(
+          spending ? 'incl. $feeText fee' : '+$feeText fee',
+          style: const TextStyle(color: AppColors.expense, fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _line(String text) => Text(
+        text,
+        style: TextStyle(color: color, fontWeight: FontWeight.w700),
+      );
 }

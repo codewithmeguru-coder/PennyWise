@@ -228,4 +228,103 @@ void main() {
     expect(ledger.spending, 1000);
     expect(ledger.categoryCents['cash_withdrawal'], 100000);
   });
+
+  group('regressions found on the phone', () {
+    testWidgets('the shortcut is on screen as soon as the form opens',
+        (tester) async {
+      await pumpApp(tester, repository: FakeTransactionRepository());
+      await openForm(tester);
+
+      // No scrolling: it sits right under the type choices.
+      expect(find.text('Cash withdrawal → Transfer').hitTestable(),
+          findsOneWidget);
+    });
+
+    testWidgets(
+        'an old withdrawal expense with a fee converts in place with the '
+        '"Convert to transfer" card, and then shows under Transfers',
+        (tester) async {
+      // Exactly the record saved on the phone: expense, cash_withdrawal,
+      // 1,000 from M-Pesa with a 29 fee.
+      final repo = await pumpApp(tester,
+          repository: FakeTransactionRepository([
+            TransactionModel(
+              id: 'phone',
+              description: 'Withdrawal',
+              amount: 1000,
+              type: TransactionType.expense,
+              categoryId: 'cash_withdrawal',
+              date: DateTime(2026, 10, 21, 13, 51),
+              account: Account.mpesa,
+              fee: 29,
+            ),
+          ]));
+      expect(Ledger.of(repo.items).spending, 1029); // before: all spending
+
+      await tester.tap(find.text('Withdrawal'));
+      await tester.pumpAndSettle();
+      expect(find.text('Saved as an expense').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('Convert to transfer'));
+      await tester.pumpAndSettle();
+      expect(find.text('Saved as an expense'), findsNothing);
+      await scrollAndTap(tester, 'Save changes');
+
+      expect(repo.items, hasLength(1));
+      final saved = repo.items.single;
+      expect(saved.id, 'phone');
+      expect(saved.type, TransactionType.transfer);
+      expect(saved.categoryId, 'transfer');
+      expect(saved.account, Account.mpesa);
+      expect(saved.toAccount, Account.cash);
+      expect(saved.amount, 1000);
+      expect(saved.fee, 29); // kept, counted once
+
+      final ledger = Ledger.of(repo.items);
+      expect(ledger.spending, 29);
+      expect(ledger.balanceOf(Account.mpesa), -1029);
+      expect(ledger.balanceOf(Account.cash), 1000);
+
+      await tester.tap(find.byIcon(Icons.receipt_long_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Transfers'));
+      await tester.pumpAndSettle();
+      expect(find.text('Withdrawal'), findsOneWidget);
+      expect(find.text('KSh 1,000.00'), findsOneWidget);
+      expect(find.text('+KSh 29.00 fee'), findsOneWidget);
+    });
+
+    testWidgets('the list shows the fee: total for spending, extra for a '
+        'transfer', (tester) async {
+      await pumpApp(tester,
+          repository: FakeTransactionRepository([
+            entry('e', 'KPLC tokens', TransactionType.expense, 1000,
+                category: 'bills', minutesAgo: 1)
+                .withFee(29),
+            entry('t', 'ATM', TransactionType.transfer, 1000,
+                toAccount: Account.cash, minutesAgo: 2)
+                .withFee(29),
+          ]));
+      await tester.tap(find.byIcon(Icons.receipt_long_outlined));
+      await tester.pumpAndSettle();
+
+      expect(find.text('-KSh 1,029.00'), findsOneWidget);
+      expect(find.text('incl. KSh 29.00 fee'), findsOneWidget);
+      expect(find.text('KSh 1,000.00'), findsOneWidget);
+      expect(find.text('+KSh 29.00 fee'), findsOneWidget);
+    });
+  });
+}
+
+extension on TransactionModel {
+  TransactionModel withFee(double fee) => TransactionModel(
+        id: id,
+        description: description,
+        amount: amount,
+        type: type,
+        categoryId: categoryId,
+        date: date,
+        account: account,
+        toAccount: toAccount,
+        fee: fee,
+      );
 }
