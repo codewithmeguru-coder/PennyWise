@@ -9,10 +9,17 @@
          (use case: SMS-based money management). -->
     <uses-permission android:name="android.permission.READ_SMS"/>
     <uses-permission android:name="android.permission.RECEIVE_SMS"/>
+    <!-- App Lock: unlock with fingerprint / face through Android's own
+         BiometricPrompt. PennyWise never receives biometric data. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <!-- Telephony isn't required: the app still installs on Wi-Fi-only
          tablets and just can't use SMS detection there. -->
     <uses-feature android:name="android.hardware.telephony" android:required="false"/>
+    <!-- allowBackup="false": App Lock's PIN data is encrypted with a key
+         that lives only in this phone's Keystore, so a restored backup could
+         never be read. Transactions are in Firebase, not in device backups. -->
     <application
+        android:allowBackup="false"
         android:label="PennyWise"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

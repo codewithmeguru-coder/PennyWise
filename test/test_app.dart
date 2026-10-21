@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pennywise/app.dart';
+import 'package:pennywise/security/app_lock_controller.dart';
 
+import 'fake_app_lock.dart';
 import 'fake_auth_service.dart';
 import 'fake_budget_repository.dart';
 import 'fake_sms.dart';
@@ -17,6 +19,7 @@ Future<FakeTransactionRepository> pumpApp(
   FakeAuthService? auth,
   FakeSmsGateway? sms,
   FakeSmsSettings? smsSettings,
+  AppLockController? appLock,
 }) async {
   final repo = repository ?? FakeTransactionRepository(testTransactions());
   final budgetRepo = budgets ?? FakeBudgetRepository();
@@ -27,6 +30,8 @@ Future<FakeTransactionRepository> pumpApp(
     budgetRepositoryForUser: (_) => budgetRepo,
     smsGateway: sms ?? FakeSmsGateway(),
     smsSettingsForUser: (_) => smsSettings ?? FakeSmsSettings(),
+    // App Lock off, in memory (no secure storage or biometrics in tests).
+    appLock: appLock ?? testAppLock(),
   ));
   await tester.pumpAndSettle();
   return repo;

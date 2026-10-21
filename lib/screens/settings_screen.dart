@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../security/app_lock_gate.dart';
 import '../sms/sms_gateway.dart';
 import '../sms/sms_import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import 'app_lock_settings_screen.dart';
 
-/// App settings. For now: the "Automatic Transaction Detection" switch.
+/// App settings: App Lock and the "Automatic Transaction Detection" switch.
 ///
 /// SMS permission is never requested silently: turning the switch on first
 /// explains what PennyWise reads and why, and only asks Android for the
@@ -130,9 +132,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
           final enabled = _sms.isEnabled;
           final permissionMissing = supported && enabled && !_sms.hasPermission;
 
+          final appLock = AppLockScope.maybeOf(context);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
+              if (appLock != null) ...[
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.lock_outline_rounded,
+                        color: AppColors.primary),
+                    title: const Text(
+                      'App Lock',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(appLock.isEnabled
+                        ? 'On · ${AppLockSettingsScreen.timeoutLabel(appLock.timeout).toLowerCase()}'
+                        : 'Off · protect PennyWise with a PIN'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) =>
+                            AppLockSettingsScreen(controller: appLock))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               Card(
                 child: SwitchListTile(
                   title: const Text(
