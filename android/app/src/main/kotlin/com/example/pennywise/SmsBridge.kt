@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.provider.Telephony
+import android.telephony.SubscriptionManager
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -128,7 +129,13 @@ class SmsBridge(private val activity: Activity, messenger: BinaryMessenger) :
         val rows = mutableListOf<Map<String, Any>>()
         val cursor = activity.contentResolver.query(
             Telephony.Sms.Inbox.CONTENT_URI,
-            arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
+            arrayOf(
+                Telephony.Sms.ADDRESS,
+                Telephony.Sms.BODY,
+                Telephony.Sms.DATE,
+                // Which SIM received it (no extra permission needed).
+                Telephony.Sms.SUBSCRIPTION_ID,
+            ),
             "${Telephony.Sms.DATE} > ?",
             arrayOf(since.toString()),
             "${Telephony.Sms.DATE} ASC"
@@ -137,15 +144,27 @@ class SmsBridge(private val activity: Activity, messenger: BinaryMessenger) :
             while (it.moveToNext()) {
                 val address = it.getString(0)
                 if (normalize(address) !in senders) continue // not M-Pesa/Airtel
+                val subId = if (it.isNull(3)) -1 else it.getInt(3)
                 rows.add(mapOf(
                     "sender" to (address ?: ""),
                     "body" to (it.getString(1) ?: ""),
                     "date" to it.getLong(2),
+                    "subscriptionId" to subId,
+                    "simSlot" to slotOf(subId),
                 ))
             }
         }
         return rows
     }
+
+    /**
+     * SIM slot (0 = SIM 1, 1 = SIM 2) for a subscription id, or -1 if
+     * unknown (no id, an old SIM that's no longer inserted, or Android < 10).
+     * SubscriptionManager.getSlotIndex needs no permission.
+     */
+    private fun slotOf(subId: Int): Int =
+        if (subId < 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) -1
+        else SubscriptionManager.getSlotIndex(subId).let { if (it < 0) -1 else it }
 
     // ---- Incoming SMS (while the app is open) --------------------------
 
@@ -163,10 +182,18 @@ class SmsBridge(private val activity: Activity, messenger: BinaryMessenger) :
                 if (parts.isEmpty()) return
                 val address = parts[0].displayOriginatingAddress
                 if (normalize(address) !in senders) return // not M-Pesa/Airtel
+                // The receiving SIM, if Android says (key used since
+                // Android 11; older versions used "subscription").
+                val subId = intent.getIntExtra(
+                    "android.telephony.extra.SUBSCRIPTION_INDEX",
+                    intent.getIntExtra("subscription", -1),
+                )
                 events.success(mapOf(
                     "sender" to (address ?: ""),
                     "body" to parts.joinToString("") { p -> p.displayMessageBody ?: "" },
                     "date" to parts[0].timestampMillis,
+                    "subscriptionId" to subId,
+                    "simSlot" to slotOf(subId),
                 ))
             }
         }

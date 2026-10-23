@@ -152,7 +152,7 @@ void main() {
     testWidgets('stays an expense when saved unchanged', (tester) async {
       final repo = await pumpApp(tester, repository: withOldWithdrawal());
 
-      await tester.tap(find.text('Withdrawal'));
+      await scrollAndTap(tester, 'Withdrawal');
       await tester.pumpAndSettle();
       // Its category is still shown and selected.
       final chip = tester.widget<ChoiceChip>(
@@ -169,7 +169,7 @@ void main() {
         (tester) async {
       final repo = await pumpApp(tester, repository: withOldWithdrawal());
 
-      await tester.tap(find.text('Withdrawal'));
+      await scrollAndTap(tester, 'Withdrawal');
       await tester.pumpAndSettle();
       await scrollAndTap(tester, 'Cash withdrawal → Transfer');
       await scrollAndTap(tester, 'Save changes');
@@ -261,7 +261,7 @@ void main() {
           ]));
       expect(Ledger.of(repo.items).spending, 1029); // before: all spending
 
-      await tester.tap(find.text('Withdrawal'));
+      await scrollAndTap(tester, 'Withdrawal');
       await tester.pumpAndSettle();
       expect(find.text('Saved as an expense').hitTestable(), findsOneWidget);
       await tester.tap(find.text('Convert to transfer'));

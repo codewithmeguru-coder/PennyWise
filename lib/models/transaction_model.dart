@@ -119,6 +119,9 @@ class TransactionModel {
     this.fee,
     this.interest,
     this.refundOf,
+    this.accountId,
+    this.toAccountId,
+    this.simSlot,
   });
 
   /// Firestore document id. Empty for a transaction that hasn't been saved.
@@ -166,6 +169,19 @@ class TransactionModel {
   /// the user linked one.
   final String? refundOf;
 
+  /// The user's own account (see `MoneyAccount`) the money left or arrived
+  /// in, e.g. "mpesa-sim1". Null on older transactions and when the SIM
+  /// couldn't be identified; [account] still says "M-Pesa" then.
+  final String? accountId;
+
+  /// For transfers, savings contributions and Fuliza: the receiving
+  /// account's id (e.g. "ziidi-sim1", "fuliza-sim2").
+  final String? toAccountId;
+
+  /// SMS imports: the SIM that received the message (0 = SIM 1,
+  /// 1 = SIM 2), when Android reported it.
+  final int? simSlot;
+
   bool get isExpense => type == TransactionType.expense;
   bool get isIncome => type == TransactionType.income;
   bool get isDetected => source != TransactionSource.manual;
@@ -198,6 +214,9 @@ class TransactionModel {
         fee: fee,
         interest: interest,
         refundOf: refundOf,
+        accountId: accountId,
+        toAccountId: toAccountId,
+        simSlot: simSlot,
       );
 
   /// A copy with [id] replaced (used when a repository assigns one).
@@ -217,5 +236,8 @@ class TransactionModel {
         fee: fee,
         interest: interest,
         refundOf: refundOf,
+        accountId: accountId,
+        toAccountId: toAccountId,
+        simSlot: simSlot,
       );
 }

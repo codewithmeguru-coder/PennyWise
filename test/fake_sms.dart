@@ -91,4 +91,14 @@ class FakeSmsSettings implements SmsSettings {
 
   @override
   Future<void> addHandledKey(String key) async => handled.add(key);
+
+  final skipped = <SkipReason, Set<String>>{};
+
+  @override
+  Future<Map<SkipReason, int>> skippedCounts() async =>
+      {for (final r in SkipReason.values) r: skipped[r]?.length ?? 0};
+
+  @override
+  Future<void> recordSkipped(SkipReason reason, String key) async =>
+      (skipped[reason] ??= {}).add(key);
 }

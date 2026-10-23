@@ -11,6 +11,9 @@ rules_version = '2';
 //   users/{uid}/budgets/{YYYY-MM}    overall spending limit per month
 //   users/{uid}/categoryRules/{key}  categories learned from the user's own
 //                                    corrections ("OUT:NAIVAS" -> shopping)
+//   users/{uid}/accounts/{id}        the user's own accounts (SIM 1 / SIM 2
+//                                    M-Pesa, their Ziidi and Fuliza, banks,
+//                                    cash)
 //
 // Anything not matched below is denied.
 service cloud.firestore {
@@ -67,6 +70,11 @@ service cloud.firestore {
         return value in ['mpesa', 'airtel_money', 'cash', 'bank'];
       }
 
+      // Ids of the user's own accounts, e.g. "mpesa-sim1", "equity-bank".
+      function isAccountId(value) {
+        return value is string && value.matches('^[a-z0-9-]{1,48}$');
+      }
+
       function isValidTransaction(data) {
         return data.keys().hasAll(
             ['amount', 'type', 'category', 'description', 'date',
@@ -75,7 +83,8 @@ service cloud.firestore {
             ['amount', 'type', 'category', 'description', 'note', 'date',
              'source', 'reference', 'smsText', 'account', 'toAccount', 'fee',
              'interest', 'refundOf', 'categoryStatus', 'channel',
-             'reclassifiedFrom', 'createdAt', 'updatedAt'])
+             'reclassifiedFrom', 'accountId', 'toAccountId', 'simSlot',
+             'createdAt', 'updatedAt'])
           && data.amount is number
           && data.amount > 0 && data.amount < 1000000000
           // "income" and "expense" are what every older document holds.
@@ -84,13 +93,33 @@ service cloud.firestore {
                            'refund', 'debt_repayment']
           // All optional, so older documents stay valid.
           && (!('account' in data) || isSpendableAccount(data.account))
-          // A transfer names both accounts, and they differ. Other types
-          // never have a toAccount.
+          // The user's own account ids (Stage 3); optional.
+          && (!('accountId' in data) || isAccountId(data.accountId))
+          && (!('toAccountId' in data) || isAccountId(data.toAccountId))
+          && (!('simSlot' in data)
+              || (data.simSlot is int && data.simSlot >= 0
+                  && data.simSlot <= 3))
+          // Two account ids on one transaction are never the same account.
+          && (!('accountId' in data && 'toAccountId' in data)
+              || data.toAccountId != data.accountId)
+          // A transfer names both sides. With account ids (needed for
+          // SIM 1 -> SIM 2, where both are "M-Pesa") both ids are required;
+          // without them, both older generic accounts (M-Pesa, Cash...) are.
+          // Any generic toAccount given must be spendable and differ from
+          // the generic account, so the two pairs can't contradict.
           && (data.type == 'transfer'
-              ? ('account' in data && 'toAccount' in data
-                 && isSpendableAccount(data.toAccount)
-                 && data.toAccount != data.account)
+              ? (('accountId' in data || 'toAccountId' in data
+                  ? ('accountId' in data && 'toAccountId' in data)
+                  : ('account' in data && 'toAccount' in data))
+                 && (!('toAccount' in data)
+                     || (isSpendableAccount(data.toAccount)
+                         && data.toAccount != data.get('account', null))))
               : !('toAccount' in data))
+          // The other-side account id only exists where there is another
+          // side: transfers, savings and debt repayments.
+          && (!('toAccountId' in data)
+              || data.type in ['transfer', 'savings_contribution',
+                               'savings_withdrawal', 'debt_repayment'])
           // Provider charge on top of the amount.
           && (!('fee' in data)
               || (data.fee is number && data.fee > 0
@@ -197,6 +226,48 @@ service cloud.firestore {
           && stampedNow('createdAt') && stampedNow('updatedAt');
         allow update: if isOwner(userId)
           && isValidRule(request.resource.data, ruleId)
+          && createdAtUnchanged() && stampedNow('updatedAt');
+      }
+
+      // ---- users/{uid}/accounts/{accountId} ------------------------------
+
+      function isValidAccount(data, accountId) {
+        return data.keys().hasAll(
+            ['name', 'kind', 'provider', 'active', 'order', 'createdAt',
+             'updatedAt'])
+          && data.keys().hasOnly(
+            ['name', 'kind', 'provider', 'simSlot', 'parentId',
+             'openingBalance', 'openingDate', 'active', 'order', 'createdAt',
+             'updatedAt'])
+          && accountId.matches('^[a-z0-9-]{1,48}$')
+          && data.name is string
+          && data.name.size() > 0 && data.name.size() <= 40
+          && data.kind in ['mobile_money', 'bank', 'cash', 'savings', 'loan']
+          && data.provider in ['safaricom', 'airtel', 'equity', 'other_bank',
+                               'none']
+          && (!('simSlot' in data)
+              || (data.simSlot is int && data.simSlot >= 0
+                  && data.simSlot <= 3))
+          && (!('parentId' in data) || isAccountId(data.parentId))
+          && (!('openingBalance' in data)
+              || (data.openingBalance is number
+                  && data.openingBalance > -1000000000
+                  && data.openingBalance < 1000000000))
+          && (!('openingDate' in data) || data.openingDate is timestamp)
+          && data.active is bool
+          && data.order is int && data.order >= 0 && data.order <= 10000
+          && data.createdAt is timestamp;
+      }
+
+      match /accounts/{accountId} {
+        // No delete: hiding an account (active = false) keeps every
+        // transaction that points at it meaningful.
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidAccount(request.resource.data, accountId)
+          && stampedNow('createdAt') && stampedNow('updatedAt');
+        allow update: if isOwner(userId)
+          && isValidAccount(request.resource.data, accountId)
           && createdAtUnchanged() && stampedNow('updatedAt');
       }
 

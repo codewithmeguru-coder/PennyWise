@@ -100,6 +100,38 @@ class SmsParser {
   static final _mpesaAirtime = RegExp(
       r'bought\s+' + _ksh + r'\s+of\s+airtime',
       caseSensitive: false);
+  // "Fuliza M-PESA amount is Ksh 50.00. Access Fee charged Ksh 0.50."
+  static final _fulizaDraw = RegExp(
+      r'^\S+\s+confirmed\.?\s*fuliza\s+m-?pesa\s+amount\s+is\s+' + _ksh +
+          r'\.?\s+access\s+fee\s+charged\s+' + _ksh,
+      caseSensitive: false);
+  // "Ksh 300.00 from your M-PESA has been used to fully (or partially) pay
+  // your outstanding Fuliza M-PESA."
+  static const _fulizaRepaid =
+      r'\s+from\s+your\s+m-?pesa\s+has\s+been\s+used\s+to\s+'
+      r'(?:fully|partially)\s+pay\s+your\s+outstanding\s+fuliza';
+  static final _fulizaRepayment = RegExp(
+      r'^\S+\s+confirmed\.?\s*' + _ksh + _fulizaRepaid,
+      caseSensitive: false);
+
+  /// True if [body] looks like a completed M-Pesa / Airtel transaction
+  /// (a transaction code, then "Confirmed"), whether or not PennyWise can
+  /// read the rest. Used to report messages it couldn't read.
+  static bool looksLikeTransaction({
+    required String sender,
+    required String body,
+  }) {
+    final source = sourceFor(sender);
+    if (source == null) return false;
+    final text = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (_failed.hasMatch(text)) return false;
+    return switch (source) {
+      TransactionSource.mpesa => _mpesaCode.hasMatch(text),
+      TransactionSource.airtel => _airtelLeadingId.hasMatch(text) ||
+          _airtelId.hasMatch(text),
+      TransactionSource.manual => false,
+    };
+  }
 
   static _Parsed? _parseMpesa(String text) {
     final code = _mpesaCode.firstMatch(text);
@@ -118,6 +150,26 @@ class SmsParser {
           account: account,
           fee: fee,
         );
+
+    // Fuliza first: these never contain "paid to" / "received", but are
+    // checked before the general patterns so nothing else claims them.
+    if (_fulizaDraw.firstMatch(text) case final m?) {
+      return _Parsed(
+        kind: SmsTransactionKind.fulizaDraw,
+        reference: reference,
+        amount: _amount(m.group(1)) ?? 0,
+        counterparty: 'Fuliza M-Pesa',
+        fee: _amount(m.group(2)),
+      );
+    }
+    if (_fulizaRepayment.firstMatch(text) case final m?) {
+      return _Parsed(
+        kind: SmsTransactionKind.fulizaRepayment,
+        reference: reference,
+        amount: _amount(m.group(1)) ?? 0,
+        counterparty: 'Fuliza M-Pesa',
+      );
+    }
 
     // Order matters: "received" before "sent", since a received message can
     // never say "sent to", but checking the specific ones first is clearer.

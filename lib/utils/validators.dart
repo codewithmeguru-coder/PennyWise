@@ -30,6 +30,18 @@ class Validators {
   static String? optionalAmount(String? value) =>
       (value?.trim() ?? '').isEmpty ? null : amount(value);
 
+  /// An optional balance that may be zero or negative (e.g. M-Pesa while
+  /// Fuliza is owed), with at most 2 decimal places.
+  static String? optionalBalance(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) return null;
+    final digits = text.startsWith('-') ? text.substring(1) : text;
+    // Same checks as [amount] on the digits (format, decimals, below 1e9,
+    // as in the Firestore rules), except that zero is allowed.
+    final error = amount(digits);
+    return error == 'Amount must be greater than 0' ? null : error;
+  }
+
   /// Required text of at most [max] UTF-16 code units once trimmed.
   ///
   /// That's the unit Firestore rules' `size()` counts (and Dart's

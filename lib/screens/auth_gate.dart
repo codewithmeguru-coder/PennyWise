@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../accounts/account_repository.dart';
 import '../categorization/category_rule_repository.dart';
 import '../data/budget_repository.dart';
 import '../data/transaction_repository.dart';
@@ -23,6 +24,7 @@ class AuthGate extends StatefulWidget {
     required this.repositoryForUser,
     required this.budgetRepositoryForUser,
     required this.categoryRulesForUser,
+    required this.accountsForUser,
     required this.smsGateway,
     required this.smsSettingsForUser,
   });
@@ -31,6 +33,7 @@ class AuthGate extends StatefulWidget {
   final TransactionRepository Function(String uid) repositoryForUser;
   final BudgetRepository Function(String uid) budgetRepositoryForUser;
   final CategoryRuleRepository Function(String uid) categoryRulesForUser;
+  final AccountRepository Function(String uid) accountsForUser;
   final SmsGateway smsGateway;
   final SmsSettings Function(String uid) smsSettingsForUser;
 
@@ -65,6 +68,7 @@ class _AuthGateState extends State<AuthGate> {
           repository: widget.repositoryForUser(user.uid),
           budgetRepository: widget.budgetRepositoryForUser(user.uid),
           categoryRules: widget.categoryRulesForUser(user.uid),
+          accounts: widget.accountsForUser(user.uid),
           smsGateway: widget.smsGateway,
           smsSettings: widget.smsSettingsForUser(user.uid),
           onSignOut: authService.signOut,
@@ -84,6 +88,7 @@ class _SignedInScope extends StatefulWidget {
     required this.repository,
     required this.budgetRepository,
     required this.categoryRules,
+    required this.accounts,
     required this.smsGateway,
     required this.smsSettings,
     required this.onSignOut,
@@ -93,6 +98,7 @@ class _SignedInScope extends StatefulWidget {
   final TransactionRepository repository;
   final BudgetRepository budgetRepository;
   final CategoryRuleRepository categoryRules;
+  final AccountRepository accounts;
   final SmsGateway smsGateway;
   final SmsSettings smsSettings;
   final Future<void> Function() onSignOut;
@@ -106,6 +112,7 @@ class _SignedInScopeState extends State<_SignedInScope>
   late final TransactionStore _store = TransactionStore(widget.repository);
   late final CategoryRuleStore _rules =
       CategoryRuleStore(widget.categoryRules);
+  late final AccountStore _accounts = AccountStore(widget.accounts);
   late final SmsImportService _sms = SmsImportService(
     gateway: widget.smsGateway,
     settings: widget.smsSettings,
@@ -114,6 +121,8 @@ class _SignedInScopeState extends State<_SignedInScope>
     save: (t, key) => _store.addDetected(t, dedupeKey: key),
     // The user's learned categories are used first for new imports.
     rules: () => _rules.rules,
+    // Each SMS goes to the account of the SIM that received it.
+    accounts: () => _accounts,
   );
   NavigatorState? _navigator;
 
@@ -142,6 +151,7 @@ class _SignedInScopeState extends State<_SignedInScope>
     WidgetsBinding.instance.removeObserver(this);
     _sms.dispose();
     _rules.dispose();
+    _accounts.dispose();
     _store.dispose();
     // The session ended (sign-out, or the account was disabled elsewhere).
     // Close any form or dialog still open on top of the home screen so it
@@ -161,6 +171,7 @@ class _SignedInScopeState extends State<_SignedInScope>
       store: _store,
       budgetRepository: widget.budgetRepository,
       categoryRules: _rules,
+      accounts: _accounts,
       smsService: _sms,
       user: widget.user,
       onSignOut: widget.onSignOut,

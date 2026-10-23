@@ -101,7 +101,7 @@ void main() {
   testWidgets('Tapping a transaction edits it', (WidgetTester tester) async {
     final repo = await pumpApp(tester);
 
-    await tester.tap(find.text('Lunch'));
+    await scrollAndTap(tester, 'Lunch');
     await tester.pumpAndSettle();
     expect(find.text('Edit transaction'), findsOneWidget);
 
@@ -118,7 +118,7 @@ void main() {
       (WidgetTester tester) async {
     final repo = await pumpApp(tester);
 
-    await tester.tap(find.text('Lunch'));
+    await scrollAndTap(tester, 'Lunch');
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Delete'));
     await tester.pumpAndSettle();

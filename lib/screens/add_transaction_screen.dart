@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../accounts/money_account.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../theme/app_theme.dart';
@@ -29,7 +30,16 @@ class TransactionDeleted extends TransactionFormResult {
 /// [TransactionFormResult] via `Navigator.pop`, and the caller writes it to
 /// the store.
 class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key, this.initial});
+  const AddTransactionScreen({
+    super.key,
+    this.initial,
+    this.accounts = const [],
+  });
+
+  /// The user's own accounts, hidden ones included. When any are active,
+  /// the form asks for one of them (e.g. "SIM 2 M-Pesa") instead of the
+  /// generic list.
+  final List<MoneyAccount> accounts;
 
   /// The transaction to edit, or null to add a new one.
   final TransactionModel? initial;
@@ -57,6 +67,46 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   /// Transfers only: where the money went.
   Account? _toAccount;
 
+  /// The user's own account ids (see [AddTransactionScreen.accounts]).
+  String? _accountId;
+  String? _toAccountId;
+
+  /// Accounts money can be paid from or into directly (not savings or
+  /// loans, which are reached through their own transaction types). Hidden
+  /// accounts are left out, except one the edited entry already uses.
+  List<MoneyAccount> get _spendable => widget.accounts
+      .where((a) =>
+          (a.active ||
+              a.id == widget.initial?.accountId ||
+              a.id == widget.initial?.toAccountId) &&
+          (a.kind == AccountKind.mobileMoney ||
+              a.kind == AccountKind.bank ||
+              a.kind == AccountKind.cash))
+      .toList();
+
+  bool get _useAccounts => _spendable.any((a) => a.active);
+
+  /// Choices for an account dropdown currently set to [selected]. An id that
+  /// isn't among them (e.g. an account not loaded yet) is still listed, as a
+  /// dropdown can't show a value missing from its items.
+  List<DropdownMenuItem<String>> _accountItems(String? selected) => [
+        for (final a in _spendable)
+          DropdownMenuItem(
+              value: a.id,
+              child: Text(a.active ? a.name : '${a.name} (hidden)')),
+        if (selected != null && !_spendable.any((a) => a.id == selected))
+          DropdownMenuItem(
+              value: selected,
+              child: Text(_byId(selected)?.name ?? 'Unknown account')),
+      ];
+
+  MoneyAccount? _byId(String? id) {
+    for (final a in widget.accounts) {
+      if (a.id == id) return a;
+    }
+    return null;
+  }
+
   bool get _isEditing => widget.initial != null;
 
   @override
@@ -82,6 +132,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     // keep "Not set" unless the SMS they came from says which account.
     _account = initial == null ? Account.mpesa : initial.effectiveAccount;
     _toAccount = initial?.toAccount;
+    _accountId = initial?.accountId;
+    _toAccountId = initial?.toAccountId;
+    // A new entry starts on the first M-Pesa account, if any.
+    if (initial == null && _useAccounts) {
+      _accountId = _spendable.first.id;
+    }
   }
 
   /// 850.0 -> "850", 12.5 -> "12.50"
@@ -134,7 +190,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             ? DefaultCategories.fixedCategoryFor(type)
             : null; // categories differ per type
         _showCategoryError = false;
-        if (type != TransactionType.transfer) _toAccount = null;
+        if (type != TransactionType.transfer) {
+          _toAccount = null;
+          _toAccountId = null;
+        }
       });
 
   /// Turns the form into a cash withdrawal (M-Pesa → Cash) or a cash deposit
@@ -147,6 +206,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     setState(() {
       _account = withdrawal ? Account.mpesa : Account.cash;
       _toAccount = withdrawal ? Account.cash : Account.mpesa;
+      if (_useAccounts) {
+        // Keep the M-Pesa account already chosen (e.g. SIM 2); use Cash for
+        // the other side.
+        final wallet = _byId(_accountId)?.kind == AccountKind.mobileMoney
+            ? _accountId
+            : _spendable
+                .where((a) => a.kind == AccountKind.mobileMoney)
+                .firstOrNull
+                ?.id;
+        final cash =
+            _spendable.where((a) => a.kind == AccountKind.cash).firstOrNull?.id;
+        _accountId = withdrawal ? wallet : cash;
+        _toAccountId = withdrawal ? cash : wallet;
+      }
     });
     if (_descriptionController.text.trim().isEmpty) {
       _descriptionController.text =
@@ -197,8 +270,39 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       source: initial?.source ?? TransactionSource.manual,
       reference: initial?.reference,
       smsText: initial?.smsText,
-      account: _account,
-      toAccount: _type == TransactionType.transfer ? _toAccount : null,
+      account: _useAccounts ? _byId(_accountId)?.legacy : _account,
+      toAccount: _type != TransactionType.transfer
+          ? null
+          : _useAccounts
+              // Two of the user's own M-Pesa lines share the generic
+              // "M-Pesa" value; then only the account ids tell them apart.
+              ? (_byId(_toAccountId)?.legacy == _byId(_accountId)?.legacy
+                  ? null
+                  : _byId(_toAccountId)?.legacy)
+              : _toAccount,
+      accountId: _useAccounts ? _accountId : initial?.accountId,
+      toAccountId: switch (_type) {
+        TransactionType.transfer when _useAccounts => _toAccountId,
+        // Savings go to (or come from) the savings account of the chosen
+        // line, e.g. Ziidi (SIM 2).
+        TransactionType.savingsContribution ||
+        TransactionType.savingsWithdrawal when _useAccounts =>
+          widget.accounts
+              .where((a) =>
+                  a.kind == AccountKind.savings && a.parentId == _accountId)
+              .firstOrNull
+              ?.id,
+        // Only these types have another side (e.g. the Fuliza loan of a
+        // repayment); keep the original one while the type is unchanged.
+        TransactionType.transfer ||
+        TransactionType.savingsContribution ||
+        TransactionType.savingsWithdrawal ||
+        TransactionType.debtRepayment =>
+          _type == initial?.type ? initial?.toAccountId : null,
+        // Income, expense and refund never have one.
+        _ => null,
+      },
+      simSlot: initial?.simSlot,
       fee: _hasFee ? _optionalNumber(_feeController) : null,
       interest: _type == TransactionType.debtRepayment
           ? _optionalNumber(_interestController)
@@ -412,6 +516,42 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                if (_useAccounts) ...[
+                  DropdownButtonFormField<String?>(
+                    key: ValueKey('accountId-$_type'),
+                    initialValue: _accountId,
+                    decoration: InputDecoration(labelText: _accountLabel),
+                    items: [
+                      if (_isEditing && widget.initial!.accountId == null)
+                        const DropdownMenuItem(
+                            value: null, child: Text('Not set')),
+                      ..._accountItems(_accountId),
+                    ],
+                    onChanged: (id) => setState(() => _accountId = id),
+                    validator: (id) =>
+                        _type == TransactionType.transfer && id == null
+                            ? 'Choose where the money came from'
+                            : null,
+                  ),
+                  if (_type == TransactionType.transfer) ...[
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      key: const ValueKey('toAccountId'),
+                      initialValue: _toAccountId,
+                      decoration:
+                          const InputDecoration(labelText: 'To account'),
+                      items: _accountItems(_toAccountId),
+                      onChanged: (id) => setState(() => _toAccountId = id),
+                      validator: (id) {
+                        if (id == null) return 'Choose where the money went';
+                        if (id == _accountId) {
+                          return 'Pick a different account';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ] else ...[
                 DropdownButtonFormField<Account?>(
                   key: ValueKey('account-$_type'),
                   initialValue: _account,
@@ -445,6 +585,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       return null;
                     },
                   ),
+                ],
                 ],
                 if (_hasFee) ...[
                   const SizedBox(height: 16),

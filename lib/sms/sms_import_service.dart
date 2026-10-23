@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../accounts/account_repository.dart';
+import '../accounts/money_account.dart';
 import '../categorization/category_rule.dart';
 import '../data/data_exception.dart';
 import '../models/transaction_category.dart';
@@ -10,6 +12,7 @@ import 'sms_categorizer.dart';
 import 'sms_gateway.dart';
 import 'sms_parser.dart';
 import 'sms_settings.dart';
+export 'sms_settings.dart' show SkipReason;
 import 'sms_transaction.dart';
 
 /// Saves a detected transaction unless it already exists; returns true if
@@ -35,7 +38,13 @@ class SmsImportService extends ChangeNotifier {
     required this._settings,
     required this._save,
     this._rules = _noRules,
+    this._accounts = _noAccounts,
   });
+
+  static AccountResolver? _noAccounts() => null;
+
+  /// The user's accounts, to put each SMS on the right SIM's account.
+  final AccountResolver? Function() _accounts;
 
   static Map<String, CategoryRule> _noRules() => const {};
 
@@ -59,6 +68,7 @@ class SmsImportService extends ChangeNotifier {
   DateTime? _lastScan;
   String? _lastError;
   bool _disposed = false;
+  Map<SkipReason, int> _skipped = const {};
 
   /// Only Android can read SMS. Elsewhere the feature is hidden/disabled.
   bool get isSupported => _gateway.isSupported;
@@ -77,6 +87,20 @@ class SmsImportService extends ChangeNotifier {
   /// Why the last scan stopped early (e.g. offline), or null.
   String? get lastError => _lastError;
 
+  /// Transaction messages not imported, by reason (see [SkipReason]).
+  Map<SkipReason, int> get skipped => _skipped;
+
+  /// Detection is on but hasn't checked for messages in over 3 days (e.g.
+  /// the app wasn't opened, or something keeps failing). Detection only
+  /// runs while PennyWise is open.
+  bool get isStale {
+    final last = _lastScan;
+    return isEnabled &&
+        isSupported &&
+        last != null &&
+        DateTime.now().difference(last) > const Duration(days: 3);
+  }
+
   /// Every transaction that was newly added, for the in-app notification.
   Stream<TransactionModel> get detected => _detected.stream;
 
@@ -87,6 +111,7 @@ class SmsImportService extends ChangeNotifier {
     try {
       _enabled = await _settings.isEnabled();
       _lastScan = await _settings.lastScan();
+      _skipped = await _settings.skippedCounts();
       _hasPermission = await _gateway.hasPermission();
       _notify();
       await _resume();
@@ -165,14 +190,30 @@ class SmsImportService extends ChangeNotifier {
 
     final parsed =
         SmsParser.parse(sender: sms.sender, body: sms.body, date: sms.date);
-    if (parsed == null) return null; // not a transaction: ignore it entirely
+    if (parsed == null) {
+      // A completed transaction we can't read is counted (code only), so
+      // Settings can say so instead of losing it silently. Promotions and
+      // other non-transaction messages are ignored entirely.
+      if (SmsParser.looksLikeTransaction(sender: sms.sender, body: sms.body)) {
+        final code = sms.body.trim().split(RegExp(r'\s+')).first;
+        await _recordSkipped(SkipReason.unreadable, code);
+      }
+      return null;
+    }
+    if (parsed.kind.isFuliza) {
+      // Read correctly, but held until loan accounts exist. Not marked as
+      // handled, so a later import brings it in once that's possible.
+      await _recordSkipped(SkipReason.fulizaWaiting, parsed.dedupeKey);
+      return null;
+    }
 
     final key = parsed.dedupeKey;
     // First check, on the device: already handled here (even if the user
     // deleted it afterwards, we don't bring it back).
     if ((await _settings.handledKeys()).contains(key)) return null;
 
-    final transaction = toTransaction(parsed, rules: _rules());
+    final transaction = toTransaction(parsed,
+        rules: _rules(), simSlot: sms.simSlot, accounts: _accounts());
     // Second check, in Firestore: the repository only creates the document
     // if no document with this key exists (e.g. imported on another phone).
     final added = await _save(transaction, key);
@@ -184,9 +225,23 @@ class SmsImportService extends ChangeNotifier {
     return saved;
   }
 
+  Future<void> _recordSkipped(SkipReason reason, String key) async {
+    await _settings.recordSkipped(reason, key);
+    _skipped = await _settings.skippedCounts();
+    _notify();
+  }
+
   /// Builds the transaction that gets saved, from a parsed SMS.
+  ///
+  /// With [accounts], the transaction is put on the account of the SIM that
+  /// received the SMS ([simSlot]); savings go to that SIM's savings account
+  /// and cash moves to the Cash account. If the SIM is unknown or has no
+  /// account, no account id is set (it shows as "SIM not recorded") rather
+  /// than guessing: SIM 1 and SIM 2 are never mixed.
   static TransactionModel toTransaction(SmsTransaction t,
-      {Map<String, CategoryRule> rules = const {}}) {
+      {Map<String, CategoryRule> rules = const {},
+      int? simSlot,
+      AccountResolver? accounts}) {
     final type = t.type;
     final isCashMove = type == TransactionType.transfer;
     final details = [
@@ -201,6 +256,28 @@ class SmsImportService extends ChangeNotifier {
         ? Account.airtelMoney
         : Account.mpesa;
     final isDeposit = t.kind == SmsTransactionKind.deposit;
+    final provider = t.source == TransactionSource.airtel
+        ? AccountProvider.airtel
+        : AccountProvider.safaricom;
+    final walletId = accounts
+        ?.forSim(simSlot, AccountKind.mobileMoney, provider: provider)
+        ?.id;
+    // Cash may be hidden from Home, but an agent withdrawal still moves
+    // money between it and the SIM; without it the SIM side would be lost.
+    final cashId = (accounts?.firstOf(AccountKind.cash) ??
+            accounts?.firstOf(AccountKind.cash, includeHidden: true))
+        ?.id;
+    final savingsId = type == TransactionType.savingsContribution ||
+            type == TransactionType.savingsWithdrawal
+        ? accounts?.forSim(simSlot, AccountKind.savings, provider: provider)?.id
+        : null;
+    // Ids are only set when the wallet is known, so a half-known move
+    // (e.g. Cash but no SIM) isn't recorded on one side only.
+    final (String? accountId, String? toAccountId) = walletId == null
+        ? (null, null)
+        : isCashMove
+            ? (isDeposit ? (cashId, walletId) : (walletId, cashId))
+            : (walletId, savingsId);
     return TransactionModel(
       description: _description(t),
       amount: t.amount,
@@ -218,6 +295,14 @@ class SmsImportService extends ChangeNotifier {
       toAccount: isCashMove ? (isDeposit ? wallet : Account.cash) : null,
       // The provider's charge, stored as a number so it counts as spending.
       fee: (t.fee ?? 0) > 0 ? t.fee : null,
+      // A cash move needs both sides; otherwise leave both unset.
+      accountId: isCashMove && (accountId == null || toAccountId == null)
+          ? null
+          : accountId,
+      toAccountId: isCashMove && (accountId == null || toAccountId == null)
+          ? null
+          : toAccountId,
+      simSlot: simSlot,
     );
   }
 
@@ -236,6 +321,8 @@ class SmsImportService extends ChangeNotifier {
       SmsTransactionKind.received => '${t.source.label} received',
       SmsTransactionKind.sent => '${t.source.label} transfer',
       SmsTransactionKind.payment => '${t.source.label} payment',
+      SmsTransactionKind.fulizaDraw => 'Fuliza loan',
+      SmsTransactionKind.fulizaRepayment => 'Fuliza repayment',
     };
   }
 

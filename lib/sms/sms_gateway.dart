@@ -6,11 +6,23 @@ import 'package:flutter/services.dart';
 /// One SMS as delivered by Android: only these three fields, and only for
 /// the allowed mobile-money senders (Android filters out everything else).
 class RawSms {
-  const RawSms({required this.sender, required this.body, required this.date});
+  const RawSms({
+    required this.sender,
+    required this.body,
+    required this.date,
+    this.subscriptionId,
+    this.simSlot,
+  });
 
   final String sender;
   final String body;
   final DateTime date;
+
+  /// Android's id for the SIM that received it, or null if unknown.
+  final int? subscriptionId;
+
+  /// 0 = SIM 1, 1 = SIM 2; null if unknown (e.g. a SIM no longer inserted).
+  final int? simSlot;
 }
 
 /// Result of asking Android for SMS permission.
@@ -108,5 +120,11 @@ class AndroidSmsGateway implements SmsGateway {
         sender: map['sender'] as String? ?? '',
         body: map['body'] as String? ?? '',
         date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int),
+        subscriptionId: _known(map['subscriptionId']),
+        simSlot: _known(map['simSlot']),
       );
+
+  /// Android reports "unknown" as -1.
+  static int? _known(Object? value) =>
+      value is int && value >= 0 ? value : null;
 }

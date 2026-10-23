@@ -20,6 +20,17 @@ enum SmsTransactionKind {
 
   /// Bought airtime or a data bundle.
   airtime,
+
+  /// Fuliza (Safaricom's overdraft) lent money to complete a payment:
+  /// "Fuliza M-PESA amount is Ksh 50.00. Access Fee charged Ksh 0.50."
+  /// The SMS uses the same code as the payment it funded.
+  fulizaDraw,
+
+  /// M-Pesa balance used to repay Fuliza: "Ksh 300.00 from your M-PESA has
+  /// been used to fully pay your outstanding Fuliza M-PESA."
+  fulizaRepayment;
+
+  bool get isFuliza => this == fulizaDraw || this == fulizaRepayment;
 }
 
 /// Everything the parser could read from one transaction SMS.
@@ -86,6 +97,10 @@ class SmsTransaction {
   ///   contribution / withdrawal;
   /// * anything else received: income; anything else paid or sent: expense.
   TransactionType get type => switch (kind) {
+        // Borrowed money arriving in M-Pesa from the Fuliza loan account:
+        // a transfer, not income. The access fee is spending (fee).
+        SmsTransactionKind.fulizaDraw => TransactionType.transfer,
+        SmsTransactionKind.fulizaRepayment => TransactionType.debtRepayment,
         SmsTransactionKind.withdrawal ||
         SmsTransactionKind.deposit =>
           TransactionType.transfer,
@@ -100,5 +115,11 @@ class SmsTransaction {
 
   /// Unique per real-world transaction: source + transaction code.
   /// Used as the Firestore document id, e.g. "mpesa_SJK3ABC123".
-  String get dedupeKey => '${source.name}_$reference';
+  ///
+  /// A Fuliza draw shares its code with the payment it funded, so it gets
+  /// its own key ("mpesa_SJK3ABC123_FULIZA"); otherwise the payment and the
+  /// loan would block each other as "duplicates".
+  String get dedupeKey => kind == SmsTransactionKind.fulizaDraw
+      ? '${source.name}_${reference}_FULIZA'
+      : '${source.name}_$reference';
 }

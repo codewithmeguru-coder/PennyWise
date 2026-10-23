@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../data/transaction_store.dart';
+import '../accounts/account_balances.dart';
+import '../accounts/account_repository.dart';
+import '../sms/sms_import_service.dart';
+import '../widgets/account_cards.dart';
 import '../models/transaction_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -19,6 +23,9 @@ class DashboardScreen extends StatelessWidget {
     required this.onTransactionTap,
     this.onOpenSettings,
     this.onOpenMenu,
+    this.smsService,
+    this.accounts,
+    this.onManageAccounts,
   });
 
   final TransactionStore store;
@@ -34,6 +41,13 @@ class DashboardScreen extends StatelessWidget {
 
   /// Opens the side menu. When null, no ☰ button is shown.
   final VoidCallback? onOpenMenu;
+
+  /// When set, a notice appears if SMS detection hasn't run for days.
+  final SmsImportService? smsService;
+
+  /// The user's own accounts, shown as cards above the summary.
+  final AccountStore? accounts;
+  final VoidCallback? onManageAccounts;
 
   /// Called when the user taps a transaction (opens the edit form).
   final ValueChanged<TransactionModel> onTransactionTap;
@@ -90,11 +104,45 @@ class DashboardScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               sliver: SliverList.list(
                 children: [
-                  BalanceCard(
-                    balance: store.balance,
-                    savings: store.savingsBalance,
-                    monthIncome: store.monthIncome,
-                    monthExpenses: store.monthExpenses,
+                  if (smsService case final sms?)
+                    ListenableBuilder(
+                      listenable: sms,
+                      builder: (context, _) => sms.isStale
+                          ? _StaleDetectionNotice(
+                              lastScan: sms.lastScan!,
+                              onOpenSettings: onOpenSettings,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  // Accounts first, the overall summary underneath.
+                  if (accounts case final acc?)
+                    ListenableBuilder(
+                      listenable: acc,
+                      builder: (context, _) => acc.isLoaded
+                          ? AccountCards(
+                              accounts: acc.active,
+                              transactions: store.transactions,
+                              onManage: onManageAccounts ?? () {},
+                              onSetUp: acc.createStarterSet,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  // After "Start balances over", the balance and savings come
+                  // from the account cards rather than the whole history.
+                  ListenableBuilder(
+                    listenable: Listenable.merge([accounts]),
+                    builder: (context, _) {
+                      final totals = accounts == null
+                          ? null
+                          : AccountBalance.totals(
+                              accounts!.active, store.transactions);
+                      return BalanceCard(
+                        balance: totals?.available ?? store.balance,
+                        savings: totals?.savings ?? store.savingsBalance,
+                        monthIncome: store.monthIncome,
+                        monthExpenses: store.monthExpenses,
+                      );
+                    },
                   ),
                   const SizedBox(height: 20),
                   SectionHeader(
@@ -155,6 +203,31 @@ class DashboardScreen extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// "SMS detection hasn't run since …": detection only works while
+/// PennyWise is open, so a long gap means messages may be waiting.
+class _StaleDetectionNotice extends StatelessWidget {
+  const _StaleDetectionNotice({required this.lastScan, this.onOpenSettings});
+
+  final DateTime lastScan;
+  final VoidCallback? onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: AppColors.warning.withValues(alpha: 0.10),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: const Icon(Icons.sms_failed_outlined, color: AppColors.warning),
+        title: Text('SMS detection last ran '
+            '${Formatters.relativeDate(lastScan).toLowerCase()}'),
+        subtitle: const Text('PennyWise checks your messages only while it is '
+            'open. Open Settings to check now or import the last 30 days.'),
+        onTap: onOpenSettings,
+      ),
     );
   }
 }

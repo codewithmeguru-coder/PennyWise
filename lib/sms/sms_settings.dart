@@ -20,6 +20,27 @@ abstract class SmsSettings {
   /// later "scan recent messages".
   Future<Set<String>> handledKeys();
   Future<void> addHandledKey(String key);
+
+  /// Transaction messages PennyWise did not import, by reason, as
+  /// {reason: number of distinct messages}. Only codes are kept, never the
+  /// message text, and only on this phone.
+  Future<Map<SkipReason, int>> skippedCounts();
+
+  /// Records that the message with [key] was skipped for [reason]. Recording
+  /// the same key twice counts it once.
+  Future<void> recordSkipped(SkipReason reason, String key);
+}
+
+/// Why a transaction message was not imported.
+enum SkipReason {
+  /// Looks like a completed transaction, but its wording isn't one PennyWise
+  /// can read yet.
+  unreadable,
+
+  /// A Fuliza loan or repayment: read correctly, but held back until loan
+  /// accounts exist, so nothing is recorded wrongly. Not marked as handled,
+  /// so a later import picks it up.
+  fulizaWaiting,
 }
 
 /// [SmsSettings] in SharedPreferences, with keys scoped to one user id.
@@ -31,6 +52,9 @@ class SharedPrefsSmsSettings implements SmsSettings {
   /// Only the most recent keys are kept; older SMS are far behind
   /// [lastScan] and won't be read again anyway.
   static const _maxHandledKeys = 500;
+
+  /// Most recent skipped codes kept per reason.
+  static const _maxSkipped = 300;
 
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
@@ -66,5 +90,28 @@ class SharedPrefsSmsSettings implements SmsSettings {
       keys.removeRange(0, keys.length - _maxHandledKeys);
     }
     await prefs.setStringList('${_prefix}handled', keys);
+  }
+
+  @override
+  Future<Map<SkipReason, int>> skippedCounts() async {
+    final prefs = await _prefs;
+    return {
+      for (final r in SkipReason.values)
+        r: (prefs.getStringList('${_prefix}skipped_${r.name}') ?? const [])
+            .length,
+    };
+  }
+
+  @override
+  Future<void> recordSkipped(SkipReason reason, String key) async {
+    final prefs = await _prefs;
+    final name = '${_prefix}skipped_${reason.name}';
+    final keys = prefs.getStringList(name) ?? <String>[];
+    if (keys.contains(key)) return;
+    keys.add(key);
+    if (keys.length > _maxSkipped) {
+      keys.removeRange(0, keys.length - _maxSkipped);
+    }
+    await prefs.setStringList(name, keys);
   }
 }

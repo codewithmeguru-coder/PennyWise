@@ -115,7 +115,7 @@ void main() {
     final repo = await pumpApp(tester,
         repository: FakeTransactionRepository(testTransactions()));
 
-    await tester.tap(find.text('Lunch'));
+    await scrollAndTap(tester, 'Lunch');
     await tester.pumpAndSettle();
     expect(find.text('Not set'), findsOneWidget);
     await scrollAndTap(tester, 'Save changes');

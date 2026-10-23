@@ -32,6 +32,7 @@ class Ledger {
     required this.transferCents,
     required this.categoryCents,
     required this.accountCents,
+    required this.accountIdCents,
     required this.transactionCount,
   });
 
@@ -43,9 +44,17 @@ class Ledger {
     var count = 0;
     final categories = <String, int>{};
     final accounts = <Account?, int>{};
+    final byId = <String?, int>{};
 
     void move(Account? account, int cents) =>
         accounts.update(account, (c) => c + cents, ifAbsent: () => cents);
+    // The same movements, by the user's own account ids ("mpesa-sim1",
+    // "ziidi-sim2", ...). Null collects transactions without an account id
+    // (older ones, or SIM unknown). [toAccountId] is the other side: the
+    // receiving account of a transfer, the savings account of a savings
+    // contribution / withdrawal, or the loan account of a debt repayment.
+    void moveId(String? id, int cents) =>
+        byId.update(id, (c) => c + cents, ifAbsent: () => cents);
     void spend(String category, int cents) =>
         categories.update(category, (c) => c + cents, ifAbsent: () => cents);
 
@@ -57,26 +66,35 @@ class Ledger {
         case TransactionType.income:
           income += cents;
           move(account, cents);
+          moveId(t.accountId, cents);
         case TransactionType.expense:
           expense += cents;
           spend(t.categoryId, cents);
           move(account, -cents);
+          moveId(t.accountId, -cents);
         case TransactionType.transfer:
           transfers += cents;
           move(account, -cents);
           move(t.toAccount, cents);
+          moveId(t.accountId, -cents);
+          moveId(t.toAccountId, cents);
         case TransactionType.savingsContribution:
           savingsIn += cents;
           move(account, -cents);
           move(Account.savings, cents);
+          moveId(t.accountId, -cents);
+          if (t.toAccountId != null) moveId(t.toAccountId, cents);
         case TransactionType.savingsWithdrawal:
           savingsOut += cents;
           move(Account.savings, -cents);
           move(account, cents);
+          if (t.toAccountId != null) moveId(t.toAccountId, -cents);
+          moveId(t.accountId, cents);
         case TransactionType.refund:
           refunds += cents;
           spend(t.categoryId, -cents);
           move(account, cents);
+          moveId(t.accountId, cents);
         case TransactionType.debtRepayment:
           // Interest can't be more than the repayment itself.
           final part = toCents(t.interest ?? 0).clamp(0, cents);
@@ -84,12 +102,16 @@ class Ledger {
           principal += cents - part;
           if (part > 0) spend(t.categoryId, part);
           move(account, -cents);
+          moveId(t.accountId, -cents);
+          // The whole repayment reduces what is owed on the loan account.
+          if (t.toAccountId != null) moveId(t.toAccountId, cents);
       }
       final fee = toCents(t.fee ?? 0);
       if (fee > 0) {
         fees += fee;
         spend(feesCategory, fee);
         move(account, -fee);
+        moveId(t.accountId, -fee);
       }
     }
 
@@ -105,6 +127,7 @@ class Ledger {
       transferCents: transfers,
       categoryCents: Map.unmodifiable(categories),
       accountCents: Map.unmodifiable(accounts),
+      accountIdCents: Map.unmodifiable(byId),
       transactionCount: count,
     );
   }
@@ -130,6 +153,14 @@ class Ledger {
   /// Net change per account. The `null` key collects older manual
   /// transactions that were saved before accounts existed.
   final Map<Account?, int> accountCents;
+
+  /// Net change per user account id ("mpesa-sim1", ...); the null key holds
+  /// transactions with no account id. Savings and loan accounts only move
+  /// when a transaction names them in `toAccountId`.
+  final Map<String?, int> accountIdCents;
+
+  /// Net change of the user's account [id]; null = not assigned to one.
+  double balanceOfId(String? id) => fromCents(accountIdCents[id] ?? 0);
 
   final int transactionCount;
 

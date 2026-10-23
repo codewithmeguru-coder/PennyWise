@@ -76,8 +76,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     }
     await _sms.enable();
-    _showMessage('Automatic detection is on. New M-Pesa and Airtel Money '
-        'transactions will be added for you.');
+    if (!mounted) return;
+    // Detection only picks up messages from now on; offer the backlog (for
+    // example after reinstalling PennyWise). Duplicates are skipped.
+    final importOld = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Also import the last 30 days?'),
+        content: const Text(
+            'Detection is on and will add new M-Pesa and Airtel Money '
+            'transactions from now on. PennyWise can also add the ones from '
+            'your messages of the last 30 days. Anything already in '
+            'PennyWise is skipped, so nothing is added twice.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (importOld == true) {
+      await _scanRecent();
+    } else {
+      _showMessage('Automatic detection is on. New M-Pesa and Airtel Money '
+          'transactions will be added when you open PennyWise.');
+    }
   }
 
   /// Android won't show its dialog again; only the Settings app can help.
@@ -192,7 +221,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   subtitle: Text(supported
                       ? 'Add M-Pesa and Airtel Money transactions from '
-                          'their SMS automatically.'
+                          'their SMS automatically. PennyWise checks your '
+                          "messages when you open it; it doesn't run in the "
+                          'background.'
                       : 'Available in the Android app only.'),
                   value: supported && enabled,
                   onChanged: !supported || _busy ? null : _onToggle,
@@ -247,6 +278,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                     ],
                   ),
+                ),
+              ],
+              if (_sms.isActive &&
+                  ((_sms.skipped[SkipReason.unreadable] ?? 0) > 0 ||
+                      (_sms.skipped[SkipReason.fulizaWaiting] ?? 0) > 0)) ...[
+                const SizedBox(height: 12),
+                _Notice(
+                  icon: Icons.info_outline_rounded,
+                  color: AppColors.textSecondary,
+                  text: [
+                    if ((_sms.skipped[SkipReason.fulizaWaiting] ?? 0) > 0)
+                      '${_sms.skipped[SkipReason.fulizaWaiting]} Fuliza '
+                          "messages were read but not added yet. They'll be "
+                          'added once loan accounts are available.',
+                    if ((_sms.skipped[SkipReason.unreadable] ?? 0) > 0)
+                      '${_sms.skipped[SkipReason.unreadable]} transaction '
+                          "messages are in a format PennyWise can't read yet. "
+                          'Add them by hand if needed.',
+                  ].join('\n\n'),
                 ),
               ],
               if (_sms.lastError != null) ...[

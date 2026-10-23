@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../accounts/account_repository.dart';
 import '../categorization/category_rule.dart';
 import '../categorization/category_rule_repository.dart';
 import '../data/budget_repository.dart';
@@ -15,6 +16,7 @@ import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/user_avatar.dart';
+import 'accounts_screen.dart';
 import 'add_transaction_screen.dart';
 import 'budgets_screen.dart';
 import 'dashboard_screen.dart';
@@ -30,6 +32,7 @@ class HomeShell extends StatefulWidget {
     required this.store,
     required this.budgetRepository,
     required this.categoryRules,
+    required this.accounts,
     required this.smsService,
     required this.user,
     required this.onSignOut,
@@ -40,6 +43,9 @@ class HomeShell extends StatefulWidget {
 
   /// Categories learned from the user's corrections.
   final CategoryRuleStore categoryRules;
+
+  /// The user's own accounts (SIM 1 / SIM 2 M-Pesa, banks, cash...).
+  final AccountStore accounts;
 
   /// Automatic transaction detection (Android only; idle elsewhere).
   final SmsImportService smsService;
@@ -100,6 +106,12 @@ class _HomeShellState extends State<HomeShell> {
   TransactionModel _latest(TransactionModel t) => widget.store.transactions
       .firstWhere((x) => x.id == t.id, orElse: () => t);
 
+  void _openAccounts() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => AccountsScreen(accounts: widget.accounts),
+    ));
+  }
+
   void _openSettings() {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => SettingsScreen(
@@ -113,7 +125,12 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _openTransactionForm([TransactionModel? existing]) async {
     final result = await Navigator.of(context).push<TransactionFormResult>(
       MaterialPageRoute(
-        builder: (_) => AddTransactionScreen(initial: existing),
+        builder: (_) => AddTransactionScreen(
+          initial: existing,
+          // All of them: the form hides hidden ones, but an entry that
+          // already uses one must still open.
+          accounts: widget.accounts.all,
+        ),
       ),
     );
     if (result == null || !mounted) return;
@@ -275,6 +292,9 @@ class _HomeShellState extends State<HomeShell> {
         onOpenSettings: _openSettings,
         onOpenMenu: _openMenu,
         onTransactionTap: _openTransactionForm,
+        smsService: widget.smsService,
+        accounts: widget.accounts,
+        onManageAccounts: _openAccounts,
       ),
       TransactionsScreen(
         store: widget.store,

@@ -106,6 +106,7 @@ class FirestoreTransactionRepository implements TransactionRepository {
   /// Fields the user can clear by editing; see [update].
   static const _optionalFields = [
     'note', 'account', 'toAccount', 'fee', 'interest', 'refundOf',
+    'accountId', 'toAccountId',
   ];
 
   /// The user-editable fields, in their Firestore types.
@@ -127,6 +128,9 @@ class FirestoreTransactionRepository implements TransactionRepository {
           'interest': t.interest,
         if (t.type == TransactionType.refund && t.refundOf != null)
           'refundOf': t.refundOf,
+        if (t.accountId != null) 'accountId': t.accountId,
+        if (t.toAccountId != null) 'toAccountId': t.toAccountId,
+        if (t.simSlot != null) 'simSlot': t.simSlot,
         // Only detected transactions carry these. Manual ones leave them out,
         // so documents written before this feature existed stay unchanged.
         if (t.isDetected) 'source': t.source.name, // "mpesa" | "airtel"
@@ -165,6 +169,9 @@ class FirestoreTransactionRepository implements TransactionRepository {
         fee: (data['fee'] as num?)?.toDouble(),
         interest: (data['interest'] as num?)?.toDouble(),
         refundOf: data['refundOf'] as String?,
+        accountId: data['accountId'] as String?,
+        toAccountId: data['toAccountId'] as String?,
+        simSlot: data['simSlot'] as int?,
       );
     } catch (e) {
       debugPrint('Skipping malformed transaction ${doc.id}: $e');

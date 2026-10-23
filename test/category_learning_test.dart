@@ -190,7 +190,7 @@ void main() {
       final repo = FakeTransactionRepository(testTransactions());
       final rules = FakeCategoryRuleRepository();
       await pumpApp(tester, repository: repo, categoryRules: rules);
-      await tester.tap(find.text('Lunch'));
+      await scrollAndTap(tester, 'Lunch');
       await tester.pumpAndSettle();
       await scrollAndTap(tester, 'Shopping');
       await scrollAndTap(tester, 'Save changes');
