@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../categorization/category_rule.dart';
 import '../data/data_exception.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
@@ -33,9 +34,15 @@ class SmsImportService extends ChangeNotifier {
     required this._gateway,
     required this._settings,
     required this._save,
+    this._rules = _noRules,
   });
 
+  static Map<String, CategoryRule> _noRules() => const {};
+
   final SmsGateway _gateway;
+
+  /// The user's learned category rules, read when each SMS is handled.
+  final Map<String, CategoryRule> Function() _rules;
   final SmsSettings _settings;
   final SaveDetected _save;
 
@@ -165,7 +172,7 @@ class SmsImportService extends ChangeNotifier {
     // deleted it afterwards, we don't bring it back).
     if ((await _settings.handledKeys()).contains(key)) return null;
 
-    final transaction = toTransaction(parsed);
+    final transaction = toTransaction(parsed, rules: _rules());
     // Second check, in Firestore: the repository only creates the document
     // if no document with this key exists (e.g. imported on another phone).
     final added = await _save(transaction, key);
@@ -178,7 +185,8 @@ class SmsImportService extends ChangeNotifier {
   }
 
   /// Builds the transaction that gets saved, from a parsed SMS.
-  static TransactionModel toTransaction(SmsTransaction t) {
+  static TransactionModel toTransaction(SmsTransaction t,
+      {Map<String, CategoryRule> rules = const {}}) {
     final type = t.type;
     final isCashMove = type == TransactionType.transfer;
     final details = [
@@ -199,7 +207,7 @@ class SmsImportService extends ChangeNotifier {
       type: type,
       categoryId: DefaultCategories.hasFixedCategory(type)
           ? DefaultCategories.fixedCategoryFor(type)
-          : SmsCategorizer.categorize(t),
+          : SmsCategorizer.categorize(t, rules: rules),
       date: t.date,
       note: details.isEmpty ? null : details.join('\n'),
       source: t.source,

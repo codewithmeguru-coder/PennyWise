@@ -1,3 +1,4 @@
+import '../categorization/merchant_key.dart';
 import '../models/transaction_model.dart';
 
 /// What kind of mobile-money transaction an SMS describes.
@@ -67,17 +68,16 @@ class SmsTransaction {
   /// The original SMS with long digit runs (phone / account numbers) masked.
   final String maskedText;
 
-  /// Savings products whose name appears as the other party, e.g.
-  /// "Ksh500.00 sent to ZIIDI" or "received Ksh500.00 from ZIIDI".
-  /// Matched against the upper-cased name with spaces and dashes removed.
-  static const savingsProducts = ['ZIIDI', 'MSHWARI', 'LOCKSAVINGS'];
+  /// Savings products, as the exact other party in the M-Pesa sentence:
+  /// "Ksh1.00 sent to ZIIDI on …" / "received Ksh500.00 from ZIIDI on …".
+  /// Compared with spaces and dashes removed ("M-Shwari" = "MSHWARI").
+  static const savingsProducts = {'ZIIDI', 'MSHWARI', 'LOCKSAVINGS'};
 
-  /// True when the other party is one of the [savingsProducts].
-  bool get isSavingsProduct {
-    final name =
-        (counterparty ?? '').toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
-    return savingsProducts.any(name.contains);
-  }
+  /// True when the other party is exactly one of the [savingsProducts]. Not
+  /// "contains": a name like "Ziidi Sacco" or an advert mentioning Ziidi
+  /// elsewhere in the SMS must not count.
+  bool get isSavingsProduct =>
+      savingsProducts.contains(MerchantKey.compact(counterparty ?? ''));
 
   /// How PennyWise records it:
   /// * cash withdrawal / deposit at an agent: a transfer between the

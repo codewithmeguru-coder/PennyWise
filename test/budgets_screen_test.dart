@@ -61,7 +61,7 @@ void main() {
     expect(find.text('Food'), findsOneWidget);
     expect(find.text('85%'), findsOneWidget);
     expect(find.text('15%'), findsOneWidget);
-    expect(find.text('Bills'), findsNothing); // last month's spending
+    expect(find.text('Utilities'), findsNothing); // last month's spending
   });
 
   testWidgets('setting a budget shows what is left', (tester) async {
@@ -126,7 +126,7 @@ void main() {
 
     expect(find.text(Formatters.monthYear(lastMonth)), findsOneWidget);
     expect(find.text('KSh 500.00'), findsOneWidget); // 2,500 - 2,000 left
-    expect(find.text('Bills'), findsOneWidget);
+    expect(find.text('Utilities'), findsOneWidget);
     expect(find.text('Food'), findsNothing);
   });
 

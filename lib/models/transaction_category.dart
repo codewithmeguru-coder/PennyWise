@@ -40,8 +40,9 @@ class DefaultCategories {
       type: TransactionType.expense,
     ),
     TransactionCategory(
+      // Id kept from the first version; stored transactions use it.
       id: 'bills',
-      name: 'Bills',
+      name: 'Utilities',
       icon: Icons.receipt_long_rounded,
       type: TransactionType.expense,
     ),
@@ -59,7 +60,7 @@ class DefaultCategories {
     ),
     TransactionCategory(
       id: 'health',
-      name: 'Health',
+      name: 'Healthcare',
       icon: Icons.favorite_rounded,
       type: TransactionType.expense,
     ),
@@ -77,8 +78,32 @@ class DefaultCategories {
     ),
     TransactionCategory(
       id: 'housing',
-      name: 'Housing',
+      name: 'Rent',
       icon: Icons.home_work_rounded,
+      type: TransactionType.expense,
+    ),
+    TransactionCategory(
+      id: 'subscriptions',
+      name: 'Subscriptions',
+      icon: Icons.subscriptions_rounded,
+      type: TransactionType.expense,
+    ),
+    TransactionCategory(
+      id: 'personal_care',
+      name: 'Personal care',
+      icon: Icons.spa_rounded,
+      type: TransactionType.expense,
+    ),
+    TransactionCategory(
+      id: 'family_support',
+      name: 'Family support',
+      icon: Icons.family_restroom_rounded,
+      type: TransactionType.expense,
+    ),
+    TransactionCategory(
+      id: 'business',
+      name: 'Business',
+      icon: Icons.storefront_rounded,
       type: TransactionType.expense,
     ),
     TransactionCategory(
@@ -132,6 +157,12 @@ class DefaultCategories {
       id: 'money_received',
       name: 'Money received',
       icon: Icons.call_received_rounded,
+      type: TransactionType.income,
+    ),
+    TransactionCategory(
+      id: 'business_income',
+      name: 'Business income',
+      icon: Icons.point_of_sale_rounded,
       type: TransactionType.income,
     ),
     TransactionCategory(

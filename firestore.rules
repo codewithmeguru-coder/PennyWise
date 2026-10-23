@@ -9,6 +9,8 @@ rules_version = '2';
 //                                    "<source>_<code>" as the id, which is
 //                                    what prevents duplicates)
 //   users/{uid}/budgets/{YYYY-MM}    overall spending limit per month
+//   users/{uid}/categoryRules/{key}  categories learned from the user's own
+//                                    corrections ("OUT:NAIVAS" -> shopping)
 //
 // Anything not matched below is denied.
 service cloud.firestore {
@@ -72,7 +74,8 @@ service cloud.firestore {
           && data.keys().hasOnly(
             ['amount', 'type', 'category', 'description', 'note', 'date',
              'source', 'reference', 'smsText', 'account', 'toAccount', 'fee',
-             'interest', 'refundOf', 'createdAt', 'updatedAt'])
+             'interest', 'refundOf', 'categoryStatus', 'channel',
+             'reclassifiedFrom', 'createdAt', 'updatedAt'])
           && data.amount is number
           && data.amount > 0 && data.amount < 1000000000
           // "income" and "expense" are what every older document holds.
@@ -116,17 +119,84 @@ service cloud.firestore {
                   && data.reference.size() <= 40))
           && (!('smsText' in data)
               || (data.smsText is string && data.smsText.size() <= 1000))
+          // Phase 3: how sure the automatic category is (missing = confirmed)
+          // and how the money moved, from the SMS.
+          && (!('categoryStatus' in data)
+              || data.categoryStatus in ['suggested', 'review'])
+          && (!('channel' in data)
+              || data.channel in ['till', 'paybill', 'send', 'agent',
+                                  'airtime', 'received'])
+          // Undo marker left by the opt-in history fix: what the record was
+          // before. Only on SMS imports, and only these three keys.
+          && (!('reclassifiedFrom' in data)
+              || ('source' in data && 'reference' in data
+                  && data.reclassifiedFrom is map
+                  && data.reclassifiedFrom.keys().hasAll(
+                      ['type', 'category', 'at'])
+                  && data.reclassifiedFrom.keys().hasOnly(
+                      ['type', 'category', 'at'])
+                  && data.reclassifiedFrom.type in ['income', 'expense']
+                  && data.reclassifiedFrom.category is string
+                  && data.reclassifiedFrom.category.size() > 0
+                  && data.reclassifiedFrom.category.size() <= 40
+                  && data.reclassifiedFrom.at is timestamp))
           && data.date is timestamp
           && data.createdAt is timestamp;
+      }
+
+      // The undo marker can't be created with a document, and when it is
+      // added or changed its time must be now (so it equals updatedAt; a
+      // later edit by the user then shows as updatedAt > at).
+      function reclassificationOk() {
+        return !('reclassifiedFrom' in request.resource.data)
+          || (('reclassifiedFrom' in resource.data)
+              && request.resource.data.reclassifiedFrom
+                   == resource.data.reclassifiedFrom)
+          || request.resource.data.reclassifiedFrom.at == request.time;
       }
 
       match /transactions/{transactionId} {
         allow read, delete: if isOwner(userId);
         allow create: if isOwner(userId)
           && isValidTransaction(request.resource.data)
+          && !('reclassifiedFrom' in request.resource.data)
           && stampedNow('createdAt') && stampedNow('updatedAt');
         allow update: if isOwner(userId)
           && isValidTransaction(request.resource.data)
+          && reclassificationOk()
+          && createdAtUnchanged() && stampedNow('updatedAt');
+      }
+
+      // ---- users/{uid}/categoryRules/{ruleId} ----------------------------
+
+      function isValidRule(data, ruleId) {
+        return data.keys().hasAll(
+            ['merchantKey', 'categoryId', 'type', 'count', 'createdAt',
+             'updatedAt'])
+          && data.keys().hasOnly(
+            ['merchantKey', 'categoryId', 'type', 'count', 'label',
+             'createdAt', 'updatedAt'])
+          // The id is the merchant key, e.g. "OUT:NAIVAS".
+          && ruleId.matches('^[A-Z0-9_:-]{1,120}$')
+          && data.merchantKey == ruleId
+          && data.categoryId is string
+          && data.categoryId.size() > 0 && data.categoryId.size() <= 40
+          && data.type in ['income', 'expense', 'transfer',
+                           'savings_contribution', 'savings_withdrawal',
+                           'refund', 'debt_repayment']
+          && data.count is int && data.count >= 1 && data.count <= 100000
+          && (!('label' in data)
+              || (data.label is string && data.label.size() <= 100))
+          && data.createdAt is timestamp;
+      }
+
+      match /categoryRules/{ruleId} {
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidRule(request.resource.data, ruleId)
+          && stampedNow('createdAt') && stampedNow('updatedAt');
+        allow update: if isOwner(userId)
+          && isValidRule(request.resource.data, ruleId)
           && createdAtUnchanged() && stampedNow('updatedAt');
       }
 

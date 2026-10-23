@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../categorization/category_rule.dart';
+import '../categorization/category_rule_repository.dart';
 import '../data/budget_repository.dart';
 import '../data/data_exception.dart';
 import '../data/transaction_store.dart';
+import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../services/auth_service.dart';
 import '../sms/sms_import_service.dart';
@@ -26,6 +29,7 @@ class HomeShell extends StatefulWidget {
     super.key,
     required this.store,
     required this.budgetRepository,
+    required this.categoryRules,
     required this.smsService,
     required this.user,
     required this.onSignOut,
@@ -33,6 +37,9 @@ class HomeShell extends StatefulWidget {
 
   final TransactionStore store;
   final BudgetRepository budgetRepository;
+
+  /// Categories learned from the user's corrections.
+  final CategoryRuleStore categoryRules;
 
   /// Automatic transaction detection (Android only; idle elsewhere).
   final SmsImportService smsService;
@@ -95,7 +102,10 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openSettings() {
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => SettingsScreen(smsService: widget.smsService),
+      builder: (_) => SettingsScreen(
+        smsService: widget.smsService,
+        categoryRules: widget.categoryRules,
+      ),
     ));
   }
 
@@ -124,7 +134,93 @@ class _HomeShellState extends State<HomeShell> {
       await write;
     } on DataException catch (e) {
       _showMessage(e.message);
+      return;
     }
+    if (existing != null && result is TransactionSaved) {
+      await _learnFrom(existing, t);
+    }
+  }
+
+  /// When the user changes the category of a detected transaction, remember
+  /// it for that merchant (used for new SMS from now on), and offer to use
+  /// it for the merchant's other transactions. Nothing older changes unless
+  /// the user confirms.
+  Future<void> _learnFrom(TransactionModel before, TransactionModel after) async {
+    if (!after.isDetected ||
+        after.type != before.type ||
+        !CategoryRule.learnable(after.type) ||
+        after.categoryId == before.categoryId ||
+        after.categoryId.startsWith('uncategorized')) {
+      return;
+    }
+    final key = CategoryRule.keyForStored(after);
+    if (key == null) return;
+    final category = DefaultCategories.byId(after.categoryId).name;
+    final merchant = before.description;
+    try {
+      await widget.categoryRules.remember(CategoryRule(
+        key: key,
+        categoryId: after.categoryId,
+        type: after.type,
+        label: merchant,
+      ));
+    } on DataException catch (e) {
+      _showMessage(e.message);
+      return;
+    }
+
+    // Others from the same merchant that are still uncategorized, or in the
+    // category this one had before (most likely the same mistake).
+    final others = widget.store.transactions
+        .where((x) =>
+            x.id != after.id &&
+            x.isDetected &&
+            x.type == after.type &&
+            (x.categoryId.startsWith('uncategorized') ||
+                x.categoryId == before.categoryId) &&
+            CategoryRule.keyForStored(x) == key)
+        .toList();
+    if (!mounted) return;
+    if (others.isEmpty) {
+      _showMessage('New transactions from $merchant will be $category.');
+      return;
+    }
+    final apply = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Use $category for ${others.length} more?'),
+        content: Text(
+          '${others.length} other ${others.length == 1 ? 'transaction' : 'transactions'} '
+          'from $merchant ${others.length == 1 ? 'is' : 'are'} '
+          '${DefaultCategories.byId(before.categoryId).name}. Only '
+          '${others.length == 1 ? 'it' : 'those'} will change, and you can '
+          'still edit each one later.\n\nNew transactions from $merchant '
+          'will be $category either way.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Apply to ${others.length}'),
+          ),
+        ],
+      ),
+    );
+    if (apply != true || !mounted) return;
+    var changed = 0;
+    try {
+      for (final x in others) {
+        await widget.store.update(x.withCategory(after.categoryId));
+        changed++;
+      }
+    } on DataException catch (e) {
+      _showMessage('Updated $changed of ${others.length}. ${e.message}');
+      return;
+    }
+    _showMessage('Updated $changed transactions to $category.');
   }
 
   void _showMessage(String message) {

@@ -181,6 +181,25 @@ class TransactionModel {
         TransactionSource.manual => null,
       };
 
+  /// A copy with only the category changed.
+  TransactionModel withCategory(String categoryId) => TransactionModel(
+        id: id,
+        description: description,
+        amount: amount,
+        type: type,
+        categoryId: categoryId,
+        date: date,
+        note: note,
+        source: source,
+        reference: reference,
+        smsText: smsText,
+        account: account,
+        toAccount: toAccount,
+        fee: fee,
+        interest: interest,
+        refundOf: refundOf,
+      );
+
   /// A copy with [id] replaced (used when a repository assigns one).
   TransactionModel withId(String id) => TransactionModel(
         id: id,

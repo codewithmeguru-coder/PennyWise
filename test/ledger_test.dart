@@ -286,7 +286,7 @@ void main() {
     });
 
     test('an unknown category shows as "Other", not as Food', () {
-      expect(DefaultCategories.byId('subscriptions').name, 'Other');
+      expect(DefaultCategories.byId('from_a_newer_version').name, 'Other');
     });
   });
 }

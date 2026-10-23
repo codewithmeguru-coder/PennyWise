@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'categorization/category_rule_repository.dart';
 import 'data/budget_repository.dart';
 import 'data/transaction_repository.dart';
 import 'screens/auth_gate.dart';
@@ -17,6 +18,7 @@ class PennyWiseApp extends StatefulWidget {
     this.authService,
     this.repositoryForUser,
     this.budgetRepositoryForUser,
+    this.categoryRulesForUser,
     this.smsGateway,
     this.smsSettingsForUser,
     this.appLock,
@@ -31,6 +33,10 @@ class PennyWiseApp extends StatefulWidget {
 
   /// Same, for budgets. Defaults to [FirestoreBudgetRepository].
   final BudgetRepository Function(String uid)? budgetRepositoryForUser;
+
+  /// Same, for learned category rules. Defaults to
+  /// [FirestoreCategoryRuleRepository].
+  final CategoryRuleRepository Function(String uid)? categoryRulesForUser;
 
   /// Optional SMS access for automatic transaction detection, so tests can
   /// run without Android. Defaults to [AndroidSmsGateway].
@@ -89,6 +95,8 @@ class _PennyWiseAppState extends State<PennyWiseApp> {
             (uid) => FirestoreTransactionRepository(uid: uid),
         budgetRepositoryForUser: widget.budgetRepositoryForUser ??
             (uid) => FirestoreBudgetRepository(uid: uid),
+        categoryRulesForUser: widget.categoryRulesForUser ??
+            (uid) => FirestoreCategoryRuleRepository(uid: uid),
         smsGateway: widget.smsGateway ?? AndroidSmsGateway(),
         smsSettingsForUser: widget.smsSettingsForUser ??
             (uid) => SharedPrefsSmsSettings(uid: uid),

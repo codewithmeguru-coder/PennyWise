@@ -89,7 +89,8 @@ void main() {
       // Moving money from M-Pesa into cash, not spending it.
       expect(t.type, TransactionType.transfer);
       expect(t.counterparty, 'Mama Mboga Agencies');
-      expect(SmsCategorizer.categorize(t), 'cash_withdrawal');
+      // A transfer since Phase 2, so its category is the fixed "transfer".
+      expect(SmsCategorizer.categorize(t), 'transfer');
 
       final model = SmsImportService.toTransaction(t);
       expect(model.description, 'Cash withdrawal');
@@ -108,7 +109,7 @@ void main() {
       expect(t.kind, SmsTransactionKind.deposit);
       // Moving cash into M-Pesa, not income.
       expect(t.type, TransactionType.transfer);
-      expect(SmsCategorizer.categorize(t), 'cash_deposit');
+      expect(SmsCategorizer.categorize(t), 'transfer');
 
       final model = SmsImportService.toTransaction(t);
       expect(model.account, Account.cash);

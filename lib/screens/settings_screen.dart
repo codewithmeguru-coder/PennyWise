@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../categorization/category_rule_repository.dart';
 import '../security/app_lock_gate.dart';
 import '../sms/sms_gateway.dart';
 import '../sms/sms_import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import 'app_lock_settings_screen.dart';
+import 'learned_categories_screen.dart';
 
 /// App settings: App Lock and the "Automatic Transaction Detection" switch.
 ///
@@ -13,9 +15,16 @@ import 'app_lock_settings_screen.dart';
 /// explains what PennyWise reads and why, and only asks Android for the
 /// permission if the user chooses to continue.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.smsService});
+  const SettingsScreen({
+    super.key,
+    required this.smsService,
+    this.categoryRules,
+  });
 
   final SmsImportService smsService;
+
+  /// Categories learned from corrections; null hides that section.
+  final CategoryRuleStore? categoryRules;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -152,6 +161,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) =>
                             AppLockSettingsScreen(controller: appLock))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (widget.categoryRules case final rules?) ...[
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.auto_awesome_outlined,
+                        color: AppColors.primary),
+                    title: const Text(
+                      'Learned categories',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text(
+                        'Categories PennyWise remembers from your changes'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) =>
+                            LearnedCategoriesScreen(rules: rules))),
                   ),
                 ),
                 const SizedBox(height: 12),
