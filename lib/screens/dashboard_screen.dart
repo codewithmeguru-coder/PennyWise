@@ -21,11 +21,13 @@ class DashboardScreen extends StatelessWidget {
     required this.onSeeAll,
     required this.onSignOut,
     required this.onTransactionTap,
+    this.onTransactionLongPress,
     this.onOpenSettings,
     this.onOpenMenu,
     this.smsService,
     this.accounts,
     this.onManageAccounts,
+    this.onSetBalances,
   });
 
   final TransactionStore store;
@@ -49,8 +51,14 @@ class DashboardScreen extends StatelessWidget {
   final AccountStore? accounts;
   final VoidCallback? onManageAccounts;
 
+  /// Opens "Set starting balances" (see [AccountCards.onSetBalances]).
+  final VoidCallback? onSetBalances;
+
   /// Called when the user taps a transaction (opens the edit form).
   final ValueChanged<TransactionModel> onTransactionTap;
+
+  /// Opens the Edit / Delete menu for a transaction.
+  final ValueChanged<TransactionModel>? onTransactionLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -123,12 +131,15 @@ class DashboardScreen extends StatelessWidget {
                               accounts: acc.active,
                               transactions: store.transactions,
                               onManage: onManageAccounts ?? () {},
+                              onSetBalances: onSetBalances,
                               onSetUp: acc.createStarterSet,
                             )
                           : const SizedBox.shrink(),
                     ),
-                  // After "Start balances over", the balance and savings come
-                  // from the account cards rather than the whole history.
+                  // With accounts, the balance and savings are the account
+                  // cards' (anchored balances), labelled by how far they can
+                  // be trusted. Without accounts there is nothing to anchor
+                  // to: the figure is only the sum of recorded history.
                   ListenableBuilder(
                     listenable: Listenable.merge([accounts]),
                     builder: (context, _) {
@@ -136,11 +147,35 @@ class DashboardScreen extends StatelessWidget {
                           ? null
                           : AccountBalance.totals(
                               accounts!.active, store.transactions);
+                      final String? note;
+                      if (totals == null) {
+                        note = store.transactions.isEmpty
+                            ? null
+                            : 'Sum of recorded transactions only. Set up '
+                                'accounts with starting balances for your '
+                                'real balance.';
+                      } else if (totals.unverified > 0) {
+                        final u = totals.unverified;
+                        note = '$u ${u == 1 ? 'account has' : 'accounts have'}'
+                            ' no starting balance: estimated';
+                      } else if (totals.mismatched > 0) {
+                        final m = totals.mismatched;
+                        note = '$m ${m == 1 ? 'account differs' : 'accounts differ'}'
+                            ' from the latest SMS: check Accounts';
+                      } else {
+                        note = null;
+                      }
                       return BalanceCard(
                         balance: totals?.available ?? store.balance,
                         savings: totals?.savings ?? store.savingsBalance,
                         monthIncome: store.monthIncome,
                         monthExpenses: store.monthExpenses,
+                        note: note,
+                        noteLabel: totals == null
+                            ? 'Not a balance'
+                            : totals.unverified > 0
+                                ? 'Estimated'
+                                : 'Check',
                       );
                     },
                   ),
@@ -193,6 +228,9 @@ class DashboardScreen extends StatelessWidget {
                           TransactionTile(
                             transaction: recent[i],
                             onTap: () => onTransactionTap(recent[i]),
+                            onLongPress: onTransactionLongPress == null
+                                ? null
+                                : () => onTransactionLongPress!(recent[i]),
                           ),
                         ],
                       ],

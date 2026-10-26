@@ -73,6 +73,13 @@ class TransactionStore extends ChangeNotifier {
 
   Future<void> delete(String id) => _repository.delete(id);
 
+  /// Undo for a delete: puts [transaction] back under its own id, with all
+  /// its fields. Like an SMS import it only creates the document if that id
+  /// is free, so it can never overwrite anything. False if it already
+  /// exists.
+  Future<bool> restore(TransactionModel transaction) =>
+      _repository.addDetected(transaction, dedupeKey: transaction.id);
+
   /// Re-subscribes after a load error (Firestore closes a failed listener).
   void retry() {
     _isLoading = true;

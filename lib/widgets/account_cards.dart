@@ -16,6 +16,7 @@ class AccountCards extends StatelessWidget {
     required this.transactions,
     required this.onManage,
     this.onSetUp,
+    this.onSetBalances,
   });
 
   final List<MoneyAccount> accounts;
@@ -24,6 +25,9 @@ class AccountCards extends StatelessWidget {
 
   /// Creates the suggested starter accounts; shown when there are none.
   final VoidCallback? onSetUp;
+
+  /// Opens "Set starting balances"; offered while any account has none.
+  final VoidCallback? onSetBalances;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +79,12 @@ class AccountCards extends StatelessWidget {
         children: [
           for (final b in balances) _AccountCard(balance: b, onTap: onManage),
           if (unassigned > 0) _UnassignedCard(count: unassigned),
+          if (onSetBalances != null && balances.any((b) => !b.hasOpening))
+            _ManageCard(
+              onTap: onSetBalances!,
+              icon: Icons.flag_outlined,
+              label: 'Set balances',
+            ),
           _ManageCard(onTap: onManage),
         ],
       ),
@@ -100,17 +110,22 @@ class _AccountCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final b = balance;
     final isLoan = b.account.kind == AccountKind.loan;
-    final amount = isLoan ? -b.shown : b.shown;
-    final String status;
-    if (b.reported != null) {
-      status = 'From latest SMS';
-    } else if (isLoan) {
-      status = amount > 0 ? 'Owed' : 'Nothing owed';
-    } else if (b.isEstimate) {
-      status = 'Estimated · no starting balance';
-    } else {
-      status = 'Calculated';
-    }
+    // A loan shows what is owed (positive), never as money available.
+    final amount = isLoan ? b.owed : b.shown;
+    final status = isLoan
+        ? (amount > 0
+            ? 'Owed'
+            : amount < 0
+                ? 'Credit? Check the amount owed'
+                : (b.hasOpening ? 'Nothing owed' : 'Owed: not set'))
+        : switch (b.status) {
+            BalanceStatus.verified => 'Matches latest SMS',
+            BalanceStatus.mismatch =>
+              'SMS differs by ${Formatters.currency(b.difference!.abs())}',
+            BalanceStatus.anchored => 'From starting balance',
+            BalanceStatus.fromSms => 'From latest SMS',
+            BalanceStatus.unverified => 'Estimated · no starting balance',
+          };
     return SizedBox(
       width: 172,
       child: Card(
@@ -142,7 +157,7 @@ class _AccountCard extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '${b.isEstimate && b.reported == null && !isLoan ? '~' : ''}'
+                    '${b.isEstimate && !isLoan ? '~' : ''}'
                     '${Formatters.currency(amount)}',
                     style: TextStyle(
                       fontSize: 18,
@@ -154,12 +169,12 @@ class _AccountCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  b.differs ? 'Differs from PennyWise records' : status,
+                  status,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: b.differs
+                    color: b.differs || (isLoan && amount < 0)
                         ? AppColors.warning
                         : AppColors.textSecondary,
                   ),
@@ -223,9 +238,15 @@ class _UnassignedCard extends StatelessWidget {
 }
 
 class _ManageCard extends StatelessWidget {
-  const _ManageCard({required this.onTap});
+  const _ManageCard({
+    required this.onTap,
+    this.icon = Icons.tune_rounded,
+    this.label = 'Accounts',
+  });
 
   final VoidCallback onTap;
+  final IconData icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -235,12 +256,14 @@ class _ManageCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          child: const Column(
+          child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.tune_rounded, color: AppColors.primary),
-              SizedBox(height: 6),
-              Text('Accounts', style: TextStyle(fontSize: 13)),
+              Icon(icon, color: AppColors.primary),
+              const SizedBox(height: 6),
+              Text(label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13)),
             ],
           ),
         ),

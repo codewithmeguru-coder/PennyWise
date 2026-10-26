@@ -277,10 +277,14 @@ void main() {
     await service.handle(sms);
     await service.handle(sms); // the same message again
     expect(repo.items, hasLength(1));
-    // The SMS states the new balance, which the M-Pesa card shows.
-    expect(balance('mpesa-sim1', repo.items, accounts), 1750);
-    final computed = AccountBalance.of(accounts.first, repo.items).computed;
-    expect(computed, 1500 - 250); // the payment counted once
+    // The payment is counted once. The SMS says 1,750 where PennyWise has
+    // 1,250: it is shown as a difference, never silently taken over.
+    final b = AccountBalance.of(accounts.first, repo.items);
+    expect(b.computed, 1500 - 250);
+    expect(b.shown, 1250);
+    expect(b.reported, 1750);
+    expect(b.status, BalanceStatus.mismatch);
+    expect(b.difference, 500);
   });
 
   group('on the Home screen', () {

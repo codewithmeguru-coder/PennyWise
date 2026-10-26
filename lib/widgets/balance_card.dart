@@ -13,7 +13,15 @@ class BalanceCard extends StatelessWidget {
     this.savings = 0,
     required this.monthIncome,
     required this.monthExpenses,
+    this.note,
+    this.noteLabel = 'Estimated',
   });
+
+  /// How far [balance] can be trusted, e.g. "2 accounts have no starting
+  /// balance"; null when it is fully checked. Shown as a small [noteLabel]
+  /// tag beside the title; tapping it shows the full note.
+  final String? note;
+  final String noteLabel;
 
   /// Money available to spend (every account except savings).
   final double balance;
@@ -39,9 +47,48 @@ class BalanceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Available balance',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+          Row(
+            children: [
+              const Flexible(
+                child: Text(
+                  'Available balance',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+              ),
+              if (note != null) ...[
+                const SizedBox(width: 8),
+                Flexible(child: Tooltip(
+                  message: note!,
+                  triggerMode: TooltipTriggerMode.tap,
+                  showDuration: const Duration(seconds: 6),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.info_outline_rounded,
+                            size: 12, color: Colors.white),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(noteLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                  ),
+                )),
+              ],
+            ],
           ),
           const SizedBox(height: 6),
           Text(

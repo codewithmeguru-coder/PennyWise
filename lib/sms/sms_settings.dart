@@ -29,6 +29,11 @@ abstract class SmsSettings {
   /// Records that the message with [key] was skipped for [reason]. Recording
   /// the same key twice counts it once.
   Future<void> recordSkipped(SkipReason reason, String key);
+
+  /// Ids of the transactions created by the Fuliza history import in this
+  /// profile, so Undo removes exactly those (see `FulizaImporter`).
+  Future<List<String>> fulizaImportIds();
+  Future<void> setFulizaImportIds(List<String> ids);
 }
 
 /// Why a transaction message was not imported.
@@ -50,8 +55,9 @@ class SharedPrefsSmsSettings implements SmsSettings {
   final String _prefix;
 
   /// Only the most recent keys are kept; older SMS are far behind
-  /// [lastScan] and won't be read again anyway.
-  static const _maxHandledKeys = 500;
+  /// [lastScan] and won't be read again anyway. Room for a Fuliza history
+  /// import on top of the usual messages.
+  static const _maxHandledKeys = 2000;
 
   /// Most recent skipped codes kept per reason.
   static const _maxSkipped = 300;
@@ -91,6 +97,14 @@ class SharedPrefsSmsSettings implements SmsSettings {
     }
     await prefs.setStringList('${_prefix}handled', keys);
   }
+
+  @override
+  Future<List<String>> fulizaImportIds() async =>
+      (await _prefs).getStringList('${_prefix}fuliza_import') ?? const [];
+
+  @override
+  Future<void> setFulizaImportIds(List<String> ids) async =>
+      (await _prefs).setStringList('${_prefix}fuliza_import', ids);
 
   @override
   Future<Map<SkipReason, int>> skippedCounts() async {

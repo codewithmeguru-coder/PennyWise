@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../data/data_exception.dart';
+import 'anchor_log.dart';
 import 'money_account.dart';
 
 /// Read / write one user's accounts (`users/{uid}/accounts`).
@@ -15,16 +16,36 @@ abstract class AccountRepository {
 
   /// Creates every account in [accounts] that doesn't exist yet.
   Future<void> createMissing(List<MoneyAccount> accounts);
+
+  /// The history of starting-balance changes, oldest first
+  /// (`users/{uid}/balanceAnchors`).
+  Future<List<AnchorChange>> anchorHistory();
+
+  /// Saves [updated] and records [change] in one atomic write. False (and
+  /// nothing written) if the account already holds this starting balance,
+  /// so a retry after an unconfirmed save doesn't record it twice.
+  Future<bool> saveWithAnchor(MoneyAccount updated, AnchorChange change);
+
+  /// Saves [restored] and marks [change] undone, atomically. False (and
+  /// nothing written) if it is already undone or the account changed since.
+  Future<bool> undoAnchor(MoneyAccount restored, AnchorChange change);
 }
 
 class FirestoreAccountRepository implements AccountRepository {
   FirestoreAccountRepository({required String uid, FirebaseFirestore? firestore})
-      : _collection = (firestore ?? FirebaseFirestore.instance)
+      : _uid = uid,
+        _collection = (firestore ?? FirebaseFirestore.instance)
             .collection('users')
             .doc(uid)
-            .collection('accounts');
+            .collection('accounts'),
+        _anchors = (firestore ?? FirebaseFirestore.instance)
+            .collection('users')
+            .doc(uid)
+            .collection('balanceAnchors');
 
+  final String _uid;
   final CollectionReference<Map<String, dynamic>> _collection;
+  final CollectionReference<Map<String, dynamic>> _anchors;
 
   @override
   Stream<List<MoneyAccount>> watchAll() => _collection
@@ -85,6 +106,139 @@ class FirestoreAccountRepository implements AccountRepository {
             'createdAt': FieldValue.serverTimestamp(),
           });
         }
+      });
+    } catch (e) {
+      throw DataException.from(e);
+    }
+  }
+
+  /// The account document's fields for an update of [account]: like
+  /// [save], clearing optional fields the account no longer has.
+  static Map<String, dynamic> _updateFields(MoneyAccount account) => {
+        ..._fields(account),
+        if (account.openingBalance == null)
+          'openingBalance': FieldValue.delete(),
+        if (account.openingDate == null) 'openingDate': FieldValue.delete(),
+      };
+
+  Map<String, dynamic> _anchorFields(AnchorChange c) => {
+        'uid': _uid,
+        'accountId': c.accountId,
+        if (c.after != null && c.afterDate != null) ...{
+          'amount': c.after,
+          'effectiveAt': Timestamp.fromDate(c.afterDate!),
+        },
+        if (c.before != null && c.beforeDate != null) ...{
+          'previousAmount': c.before,
+          'previousEffectiveAt': Timestamp.fromDate(c.beforeDate!),
+        },
+        'currency': 'KES',
+        'reason': c.reason,
+        'undone': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+  @override
+  Future<List<AnchorChange>> anchorHistory() async {
+    try {
+      final snap = await _anchors.orderBy('createdAt').get();
+      return [for (final d in snap.docs) ?_anchorFromDoc(d)];
+    } catch (e) {
+      throw DataException.from(e);
+    }
+  }
+
+  static AnchorChange? _anchorFromDoc(
+      QueryDocumentSnapshot<Map<String, dynamic>> d) {
+    try {
+      final data = d.data();
+      return AnchorChange(
+        id: d.id,
+        accountId: data['accountId'] as String,
+        // Pending server time on a just-made local write: now.
+        at: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        reason: data['reason'] as String,
+        before: (data['previousAmount'] as num?)?.toDouble(),
+        beforeDate: (data['previousEffectiveAt'] as Timestamp?)?.toDate(),
+        after: (data['amount'] as num?)?.toDouble(),
+        afterDate: (data['effectiveAt'] as Timestamp?)?.toDate(),
+        undone: data['undone'] as bool? ?? false,
+      );
+    } catch (e) {
+      debugPrint('Skipping malformed balance anchor ${d.id}');
+      return null;
+    }
+  }
+
+  static double? _amount(Map<String, dynamic>? data) =>
+      (data?['openingBalance'] as num?)?.toDouble();
+  static DateTime? _date(Map<String, dynamic>? data) =>
+      (data?['openingDate'] as Timestamp?)?.toDate();
+
+  static bool _holds(
+          Map<String, dynamic>? data, double? amount, DateTime? date) =>
+      (_amount(data) == null) == (amount == null) &&
+      (amount == null || (_amount(data)! * 100).round() == (amount * 100).round()) &&
+      _date(data)?.millisecondsSinceEpoch == date?.millisecondsSinceEpoch;
+
+  @override
+  Future<bool> saveWithAnchor(MoneyAccount updated, AnchorChange change) async {
+    final doc = _collection.doc(updated.id);
+    try {
+      return await _collection.firestore.runTransaction((tx) async {
+        final existing = await tx.get(doc);
+        if (!existing.exists) {
+          throw const DataException('That account no longer exists.');
+        }
+        if (_holds(existing.data(), updated.openingBalance,
+            updated.openingDate)) {
+          return false; // already saved (e.g. a retry)
+        }
+        final previous = existing.data();
+        tx.update(doc, _updateFields(updated));
+        tx.set(
+          _anchors.doc(change.id),
+          _anchorFields(AnchorChange(
+            id: change.id,
+            accountId: change.accountId,
+            at: change.at,
+            reason: change.reason,
+            // What the account really held, as read in this transaction.
+            before: _amount(previous),
+            beforeDate: _amount(previous) == null ? null : _date(previous),
+            after: change.after,
+            afterDate: change.afterDate,
+          )),
+        );
+        return true;
+      });
+    } on DataException {
+      rethrow;
+    } catch (e) {
+      throw DataException.from(e);
+    }
+  }
+
+  @override
+  Future<bool> undoAnchor(MoneyAccount restored, AnchorChange change) async {
+    final doc = _collection.doc(restored.id);
+    final anchor = _anchors.doc(change.id);
+    try {
+      return await _collection.firestore.runTransaction((tx) async {
+        final record = await tx.get(anchor);
+        final account = await tx.get(doc);
+        if (!record.exists ||
+            record.data()?['undone'] == true ||
+            !account.exists ||
+            !_holds(account.data(), change.after, change.afterDate)) {
+          return false; // undone already, or changed since
+        }
+        tx.update(doc, _updateFields(restored));
+        tx.update(anchor, {
+          'undone': true,
+          'undoneAt': FieldValue.serverTimestamp(),
+        });
+        return true;
       });
     } catch (e) {
       throw DataException.from(e);
@@ -191,6 +345,13 @@ class AccountStore extends ChangeNotifier implements AccountResolver {
   }
 
   Future<void> save(MoneyAccount a) => _repository.save(a);
+
+  /// See [AccountRepository.anchorHistory] and [AnchorKeeper].
+  Future<List<AnchorChange>> anchorHistory() => _repository.anchorHistory();
+  Future<bool> saveWithAnchor(MoneyAccount a, AnchorChange c) =>
+      _repository.saveWithAnchor(a, c);
+  Future<bool> undoAnchor(MoneyAccount a, AnchorChange c) =>
+      _repository.undoAnchor(a, c);
 
   Future<void> createStarterSet() =>
       _repository.createMissing(MoneyAccount.starterSet());

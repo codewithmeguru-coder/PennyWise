@@ -24,6 +24,12 @@ class TransactionDeleted extends TransactionFormResult {
   const TransactionDeleted(super.transaction);
 }
 
+/// The user chose to look at an existing transaction (a possible duplicate)
+/// instead of saving the new one.
+class TransactionOpenExisting extends TransactionFormResult {
+  const TransactionOpenExisting(super.transaction);
+}
+
 /// Full-screen form for adding any kind of transaction, or editing one.
 ///
 /// It doesn't save anything itself: it closes and returns a
@@ -34,7 +40,13 @@ class AddTransactionScreen extends StatefulWidget {
     super.key,
     this.initial,
     this.accounts = const [],
+    this.possibleDuplicatesOf,
   });
+
+  /// For a new entry: SMS imports it may repeat (see `DuplicateFinder`),
+  /// best first. Saving one asks first; it is never blocked.
+  final List<TransactionModel> Function(TransactionModel draft)?
+      possibleDuplicatesOf;
 
   /// The user's own accounts, hidden ones included. When any are active,
   /// the form asks for one of them (e.g. "SIM 2 M-Pesa") instead of the
@@ -309,7 +321,57 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           : null,
       refundOf: _type == TransactionType.refund ? initial?.refundOf : null,
     );
+    if (!_isEditing) {
+      final matches = widget.possibleDuplicatesOf?.call(transaction) ?? const [];
+      if (matches.isNotEmpty) {
+        _confirmNotDuplicate(transaction, matches.first);
+        return;
+      }
+    }
     Navigator.of(context).pop(TransactionSaved(transaction));
+  }
+
+  /// Asks before saving [draft], which looks like [existing] (already
+  /// recorded from an SMS). "Go back" keeps everything typed in the form.
+  Future<void> _confirmNotDuplicate(
+      TransactionModel draft, TransactionModel existing) async {
+    final choice = await showDialog<_DuplicateChoice>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Already recorded?'),
+        content: Text(
+          'This looks like a transaction PennyWise already added from '
+          '${existing.source.label}:\n\n'
+          '${existing.description} · ${Formatters.currency(existing.amount)}'
+          ' · ${Formatters.shortDate(existing.date)}'
+          '${existing.simSlot == null ? '' : ' · SIM ${existing.simSlot! + 1}'}'
+          '\n\nSave it anyway only if it is a different payment.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(_DuplicateChoice.back),
+            child: const Text('Go back'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(_DuplicateChoice.open),
+            child: const Text('Open existing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(_DuplicateChoice.save),
+            child: const Text('Save anyway'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    switch (choice) {
+      case _DuplicateChoice.save:
+        Navigator.of(context).pop(TransactionSaved(draft));
+      case _DuplicateChoice.open:
+        Navigator.of(context).pop(TransactionOpenExisting(existing));
+      case _DuplicateChoice.back || null:
+        break; // the form stays as it was
+    }
   }
 
   Future<void> _confirmDelete() async {
@@ -797,3 +859,5 @@ class _ConvertCashCard extends StatelessWidget {
     );
   }
 }
+
+enum _DuplicateChoice { save, open, back }

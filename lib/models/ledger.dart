@@ -62,6 +62,14 @@ class Ledger {
       count++;
       final cents = toCents(t.amount);
       final account = t.effectiveAccount;
+      // A transfer from one of the user's own accounts that has no generic
+      // account (a Fuliza loan, by id only): the money is borrowed, so it
+      // isn't taken from any generic account. Only the receiving side moves
+      // there; the loan account itself is tracked by id below (its fee
+      // too). Every other transfer names its generic `account`.
+      final borrowed = t.type == TransactionType.transfer &&
+          t.account == null &&
+          t.accountId != null;
       switch (t.type) {
         case TransactionType.income:
           income += cents;
@@ -74,7 +82,7 @@ class Ledger {
           moveId(t.accountId, -cents);
         case TransactionType.transfer:
           transfers += cents;
-          move(account, -cents);
+          if (!borrowed) move(account, -cents);
           move(t.toAccount, cents);
           moveId(t.accountId, -cents);
           moveId(t.toAccountId, cents);
@@ -110,7 +118,7 @@ class Ledger {
       if (fee > 0) {
         fees += fee;
         spend(feesCategory, fee);
-        move(account, -fee);
+        if (!borrowed) move(account, -fee);
         moveId(t.accountId, -fee);
       }
     }

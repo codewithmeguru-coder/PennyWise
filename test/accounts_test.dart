@@ -147,6 +147,8 @@ void main() {
           toAccountId: to,
           fee: fee,
           smsText: sms,
+          // A stated balance only counts from a real SMS import.
+          source: sms == null ? TransactionSource.manual : TransactionSource.mpesa,
         );
 
     test('SIM 1 and SIM 2 stay separate; a transfer between them is counted '
@@ -177,7 +179,8 @@ void main() {
       expect(ledger.spending, 0);
     });
 
-    test('card balance: stated SMS balance first, else estimate', () {
+    test('card balance: no starting balance -> latest SMS, else estimate',
+        () {
       final sim1 = MoneyAccount.starterSet().first;
       final withSms = AccountBalance.of(sim1, [
         tx(TransactionType.expense, 250,
@@ -403,9 +406,12 @@ void main() {
       final totals = AccountBalance.totals(accounts, txs)!;
       expect(totals.available, 1500 - 200); // SIM 1, SIM 2 and Cash
       expect(totals.savings, 50); // loans aren't part of either
-      // Until every account has a starting balance, Home keeps using the
-      // whole history.
-      expect(AccountBalance.totals(MoneyAccount.starterSet(), txs), isNull);
+      // Without starting balances Home still adds up the cards (not the
+      // whole history), and says how many are only estimates.
+      final unanchored =
+          AccountBalance.totals(MoneyAccount.starterSet(), txs)!;
+      expect(unanchored.unverified, greaterThan(0));
+      expect(AccountBalance.totals(const [], txs), isNull);
     });
 
     testWidgets('Start over sets every balance from now', (tester) async {

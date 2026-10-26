@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../data/transaction_store.dart';
 import '../models/transaction_model.dart';
+import '../utils/transaction_search.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/search_field.dart';
+import 'needs_review_screen.dart';
 import '../widgets/transaction_tile.dart';
 
 /// Which transactions the list is showing.
@@ -17,6 +20,8 @@ class TransactionsScreen extends StatefulWidget {
     super.key,
     required this.store,
     required this.onTransactionTap,
+    this.onTransactionLongPress,
+    this.onOpenNeedsReview,
     this.onOpenMenu,
   });
 
@@ -24,6 +29,13 @@ class TransactionsScreen extends StatefulWidget {
 
   /// Called when the user taps a transaction (opens the edit form).
   final ValueChanged<TransactionModel> onTransactionTap;
+
+  /// Opens the Edit / Delete menu for a transaction.
+  final ValueChanged<TransactionModel>? onTransactionLongPress;
+
+  /// Opens the Needs review list; its button shows while any transaction
+  /// still has no category.
+  final VoidCallback? onOpenNeedsReview;
 
   /// Opens the side menu. When null, no ☰ button is shown.
   final VoidCallback? onOpenMenu;
@@ -34,6 +46,14 @@ class TransactionsScreen extends StatefulWidget {
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
   _Filter _filter = _Filter.all;
+  final _search = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   List<TransactionModel> _applyFilter(List<TransactionModel> items) {
     switch (_filter) {
@@ -80,6 +100,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       body: Column(
         children: [
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: SearchField(
+              controller: _search,
+              hint: 'Search name, amount, category, code',
+              onChanged: (q) => setState(() => _query = q),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             child: SizedBox(
               width: double.infinity,
@@ -103,6 +131,28 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               ),
             ),
           ),
+          if (widget.onOpenNeedsReview case final open?)
+            ListenableBuilder(
+              listenable: widget.store,
+              builder: (context, _) {
+                final count = widget.store.isLoading
+                    ? 0
+                    : NeedsReviewScreen.pending(widget.store.transactions)
+                        .length;
+                if (count == 0) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: open,
+                      icon: const Icon(Icons.rule_rounded),
+                      label: Text('Needs review ($count)'),
+                    ),
+                  ),
+                );
+              },
+            ),
           Expanded(
             child: ListenableBuilder(
               listenable: widget.store,
@@ -121,13 +171,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   );
                 }
 
-                final items = _applyFilter(store.transactions);
+                final items = TransactionSearch.filter(
+                    _applyFilter(store.transactions), _query);
 
                 if (items.isEmpty) {
-                  return const EmptyState(
+                  return EmptyState(
                     icon: Icons.search_off_rounded,
                     title: 'Nothing here',
-                    message: 'No transactions match this filter yet.',
+                    message: _query.trim().isEmpty
+                        ? 'No transactions match this filter yet.'
+                        : 'No transactions match "${_query.trim()}".',
                   );
                 }
 
@@ -139,6 +192,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   itemBuilder: (context, index) => TransactionTile(
                     transaction: items[index],
                     onTap: () => widget.onTransactionTap(items[index]),
+                    onLongPress: widget.onTransactionLongPress == null
+                        ? null
+                        : () => widget.onTransactionLongPress!(items[index]),
                   ),
                 );
               },

@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../categorization/category_rule_repository.dart';
 import '../security/app_lock_gate.dart';
+import '../maintenance/ziidi_fix.dart';
+import '../sms/fuliza_import.dart';
 import '../sms/sms_gateway.dart';
 import '../sms/sms_import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import 'app_lock_settings_screen.dart';
+import 'fuliza_import_screen.dart';
+import 'ziidi_fix_screen.dart';
 import 'learned_categories_screen.dart';
 
 /// App settings: App Lock and the "Automatic Transaction Detection" switch.
@@ -19,12 +23,20 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     required this.smsService,
     this.categoryRules,
+    this.fulizaImporter,
+    this.ziidiFixer,
   });
 
   final SmsImportService smsService;
 
   /// Categories learned from corrections; null hides that section.
   final CategoryRuleStore? categoryRules;
+
+  /// The Fuliza history import; null hides its entry.
+  final FulizaImporter? fulizaImporter;
+
+  /// Fix old Ziidi records; null hides its entry.
+  final ZiidiFixer? ziidiFixer;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -260,6 +272,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             : null,
                         onTap: _sms.isScanning ? null : _scanRecent,
                       ),
+                      if (widget.ziidiFixer case final fixer?)
+                        ListTile(
+                          leading: const Icon(Icons.savings_outlined),
+                          title: const Text('Fix old Ziidi records'),
+                          subtitle: const Text('See which older records are '
+                              'Ziidi savings, then choose whether to fix '
+                              'them.'),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => ZiidiFixScreen(fixer: fixer),
+                            ),
+                          ),
+                        ),
+                      if (widget.fulizaImporter case final importer?)
+                        ListTile(
+                          leading: const Icon(Icons.credit_score_rounded),
+                          title: const Text('Fuliza history'),
+                          subtitle: const Text('See Fuliza loans and '
+                              'repayments, then choose whether to import '
+                              'them.'),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  FulizaImportScreen(importer: importer),
+                            ),
+                          ),
+                        ),
                       if (_sms.lastScan != null)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),

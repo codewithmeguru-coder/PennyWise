@@ -101,4 +101,13 @@ class FakeSmsSettings implements SmsSettings {
   @override
   Future<void> recordSkipped(SkipReason reason, String key) async =>
       (skipped[reason] ??= {}).add(key);
+
+  List<String> fulizaIds = [];
+
+  @override
+  Future<List<String>> fulizaImportIds() async => [...fulizaIds];
+
+  @override
+  Future<void> setFulizaImportIds(List<String> ids) async =>
+      fulizaIds = [...ids];
 }

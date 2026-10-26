@@ -3,14 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../accounts/account_repository.dart';
+import '../accounts/anchor_log.dart';
+import '../accounts/money_account.dart';
 import '../categorization/category_rule.dart';
 import '../categorization/category_rule_repository.dart';
 import '../data/budget_repository.dart';
 import '../data/data_exception.dart';
 import '../data/transaction_store.dart';
+import '../models/duplicate_finder.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../services/auth_service.dart';
+import '../maintenance/ziidi_fix.dart';
+import '../sms/fuliza_import.dart';
 import '../sms/sms_import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -20,6 +25,7 @@ import 'accounts_screen.dart';
 import 'add_transaction_screen.dart';
 import 'budgets_screen.dart';
 import 'dashboard_screen.dart';
+import 'needs_review_screen.dart';
 import 'settings_screen.dart';
 import 'transactions_screen.dart';
 
@@ -34,6 +40,9 @@ class HomeShell extends StatefulWidget {
     required this.categoryRules,
     required this.accounts,
     required this.smsService,
+    this.fulizaImporter,
+    this.ziidiFixer,
+    this.anchorKeeper,
     required this.user,
     required this.onSignOut,
   });
@@ -49,6 +58,15 @@ class HomeShell extends StatefulWidget {
 
   /// Automatic transaction detection (Android only; idle elsewhere).
   final SmsImportService smsService;
+
+  /// Settings › Fuliza history (see [FulizaImporter]).
+  final FulizaImporter? fulizaImporter;
+
+  /// Settings › Fix old Ziidi records (see [ZiidiFixer]).
+  final ZiidiFixer? ziidiFixer;
+
+  /// Changes starting balances with an audit trail and Undo.
+  final AnchorKeeper? anchorKeeper;
   final AppUser user;
 
   /// Signs the user out; [AuthGate] then shows the login screen.
@@ -83,20 +101,33 @@ class _HomeShellState extends State<HomeShell> {
   /// In-app notification for a transaction found in an SMS, e.g.
   /// "New M-Pesa transaction detected: KSh 500.00 — Naivas", with a button
   /// to open it in the edit form (to fix the category, for example).
+  ///
+  /// If it looks like a transaction already entered by hand, the message
+  /// says so and its button opens that manual entry to review (the SMS is
+  /// saved either way; nothing is removed automatically).
   void _showDetected(TransactionModel t) {
     if (!mounted) return;
+    final twin = DuplicateFinder.manualMatchesFor(t, widget.store.transactions)
+        .firstOrNull;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text('New ${t.source.label} transaction detected: '
-              '${Formatters.currency(t.amount)} — ${t.description}'),
+              '${Formatters.currency(t.amount)} — ${t.description}'
+              '${twin == null ? '' : '. Possible duplicate of '
+                  '"${twin.description}".'}'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 6),
-          action: SnackBarAction(
-            label: 'Edit',
-            onPressed: () => _openTransactionForm(_latest(t)),
-          ),
+          duration: Duration(seconds: twin == null ? 6 : 10),
+          action: twin == null
+              ? SnackBarAction(
+                  label: 'Edit',
+                  onPressed: () => _openTransactionForm(_latest(t)),
+                )
+              : SnackBarAction(
+                  label: 'Review',
+                  onPressed: () => _openTransactionForm(_latest(twin)),
+                ),
         ),
       );
   }
@@ -108,8 +139,41 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openAccounts() {
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => AccountsScreen(accounts: widget.accounts),
+      builder: (_) => AccountsScreen(
+        accounts: widget.accounts,
+        transactions: () => widget.store.transactions,
+        keeper: widget.anchorKeeper,
+      ),
     ));
+  }
+
+  /// First-time setup (and later): a starting balance for each account,
+  /// typed or taken from its latest SMS, or skipped.
+  Future<void> _setBalances() async {
+    final result = await Navigator.of(context).push<List<MoneyAccount>>(
+      MaterialPageRoute(
+        builder: (_) => StartOverScreen(
+          accounts: widget.accounts.all,
+          transactions: widget.store.transactions,
+          title: 'Set starting balances',
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      for (final a in result) {
+        final keeper = widget.anchorKeeper;
+        if (keeper != null) {
+          await keeper.change(a, reason: 'Starting balances');
+        } else {
+          await widget.accounts.save(a);
+        }
+      }
+    } on DataException catch (e) {
+      _showMessage(e.message);
+      return;
+    }
+    _showMessage('Starting balances saved');
   }
 
   void _openSettings() {
@@ -117,6 +181,8 @@ class _HomeShellState extends State<HomeShell> {
       builder: (_) => SettingsScreen(
         smsService: widget.smsService,
         categoryRules: widget.categoryRules,
+        fulizaImporter: widget.fulizaImporter,
+        ziidiFixer: widget.ziidiFixer,
       ),
     ));
   }
@@ -130,10 +196,21 @@ class _HomeShellState extends State<HomeShell> {
           // All of them: the form hides hidden ones, but an entry that
           // already uses one must still open.
           accounts: widget.accounts.all,
+          possibleDuplicatesOf: (draft) =>
+              DuplicateFinder.smsMatchesFor(draft, widget.store.transactions),
         ),
       ),
     );
     if (result == null || !mounted) return;
+    if (result is TransactionOpenExisting) {
+      // Nothing saved; show the transaction it may repeat instead.
+      await _openTransactionForm(_latest(result.transaction));
+      return;
+    }
+    if (result is TransactionDeleted) {
+      await _delete(result.transaction);
+      return;
+    }
 
     final t = result.transaction;
     final store = widget.store;
@@ -141,7 +218,9 @@ class _HomeShellState extends State<HomeShell> {
       TransactionSaved() when existing == null =>
         (store.add(t), 'Added "${t.description}"'),
       TransactionSaved() => (store.update(t), 'Saved changes'),
-      TransactionDeleted() => (store.delete(t.id), 'Deleted "${t.description}"'),
+      TransactionDeleted() ||
+      TransactionOpenExisting() =>
+        throw StateError('handled above'),
     };
 
     // The list updates straight away from Firestore's local cache, so confirm
@@ -153,9 +232,142 @@ class _HomeShellState extends State<HomeShell> {
       _showMessage(e.message);
       return;
     }
-    if (existing != null && result is TransactionSaved) {
+    if (existing != null) {
       await _learnFrom(existing, t);
     }
+  }
+
+  /// Needs review: saves [before] with only its category changed, then
+  /// learns from it exactly as an edit in the form would.
+  Future<void> _correctCategory(
+      TransactionModel before, String categoryId) async {
+    final after = before.withCategory(categoryId);
+    try {
+      await widget.store.update(after);
+    } on DataException catch (e) {
+      _showMessage(e.message);
+      return;
+    }
+    _showMessage('Saved as ${DefaultCategories.byId(categoryId).name}');
+    await _learnFrom(before, after);
+  }
+
+  /// Long press on a transaction: Edit or Delete. Nothing changes until an
+  /// action is chosen (and, for Delete, confirmed).
+  Future<void> _showActions(TransactionModel t) async {
+    final action = await showModalBottomSheet<_RowAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(t.description,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text('${Formatters.currency(t.amount)} · '
+                  '${Formatters.shortDate(t.date)}'),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit'),
+              onTap: () => Navigator.of(context).pop(_RowAction.edit),
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.delete_outline, color: AppColors.expense),
+              title: const Text('Delete',
+                  style: TextStyle(color: AppColors.expense)),
+              onTap: () => Navigator.of(context).pop(_RowAction.delete),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case _RowAction.edit:
+        await _openTransactionForm(_latest(t));
+      case _RowAction.delete:
+        await _confirmAndDelete(_latest(t));
+      case null:
+        break;
+    }
+  }
+
+  /// Deletes [t] after a confirmation naming it. A transfer is one record
+  /// holding both sides, so it goes as a whole and no account is left half
+  /// changed. An SMS entry stays in this phone's list of handled messages,
+  /// so it isn't imported again.
+  Future<void> _confirmAndDelete(TransactionModel t) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete transaction?'),
+        content: Text(
+          '${t.description} · ${Formatters.currency(t.amount)} · '
+          '${Formatters.shortDate(t.date)}\n\n'
+          '${t.isDetected ? "It won't be added again from its SMS. " : ''}'
+          "This can't be undone.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.expense),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _delete(t);
+  }
+
+  /// Deletes [t] and, once that has worked, offers Undo.
+  Future<void> _delete(TransactionModel t) async {
+    try {
+      await widget.store.delete(t.id);
+    } on DataException catch (e) {
+      _showMessage(e.message);
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Deleted "${t.description}"'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(label: 'Undo', onPressed: () => _undo(t)),
+        ),
+      );
+  }
+
+  /// Puts a deleted transaction back exactly as it was, under its own id
+  /// (so an SMS one keeps its transaction code).
+  Future<void> _undo(TransactionModel t) async {
+    try {
+      await widget.store.restore(t);
+    } on DataException catch (e) {
+      _showMessage(e.message);
+      return;
+    }
+    _showMessage('Restored "${t.description}"');
+  }
+
+  void _openNeedsReview() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => NeedsReviewScreen(
+        store: widget.store,
+        onCorrect: _correctCategory,
+      ),
+    ));
   }
 
   /// When the user changes the category of a detected transaction, remember
@@ -292,14 +504,18 @@ class _HomeShellState extends State<HomeShell> {
         onOpenSettings: _openSettings,
         onOpenMenu: _openMenu,
         onTransactionTap: _openTransactionForm,
+        onTransactionLongPress: _showActions,
         smsService: widget.smsService,
         accounts: widget.accounts,
         onManageAccounts: _openAccounts,
+        onSetBalances: _setBalances,
       ),
       TransactionsScreen(
         store: widget.store,
         onTransactionTap: _openTransactionForm,
+        onTransactionLongPress: _showActions,
         onOpenMenu: _openMenu,
+        onOpenNeedsReview: _openNeedsReview,
       ),
       BudgetsScreen(
         store: widget.store,
@@ -391,3 +607,5 @@ class _SignedInAs extends StatelessWidget {
     );
   }
 }
+
+enum _RowAction { edit, delete }

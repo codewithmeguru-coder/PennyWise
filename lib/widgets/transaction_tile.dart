@@ -8,12 +8,20 @@ import '../utils/formatters.dart';
 
 /// One row in a transaction list: category icon, title, date and amount.
 class TransactionTile extends StatelessWidget {
-  const TransactionTile({super.key, required this.transaction, this.onTap});
+  const TransactionTile({
+    super.key,
+    required this.transaction,
+    this.onTap,
+    this.onLongPress,
+  });
 
   final TransactionModel transaction;
 
   /// Called when the row is tapped (opens the edit form).
   final VoidCallback? onTap;
+
+  /// Called on a long press (opens the Edit / Delete menu).
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +39,11 @@ class TransactionTile extends StatelessWidget {
         (AppColors.savings, ''),
     };
     final accounts = switch (t.type) {
+      // Borrowed (a Fuliza loan): from the loan, which has no generic account.
+      TransactionType.transfer when t.account == null &&
+              t.accountId != null &&
+              t.toAccount != null =>
+        'Fuliza → ${t.toAccount!.label}',
       TransactionType.transfer when t.effectiveAccount != null &&
               t.toAccount != null =>
         '${t.effectiveAccount!.label} → ${t.toAccount!.label}',
@@ -39,6 +52,7 @@ class TransactionTile extends StatelessWidget {
 
     return ListTile(
       onTap: onTap,
+      onLongPress: onLongPress,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: CircleAvatar(
         radius: 22,

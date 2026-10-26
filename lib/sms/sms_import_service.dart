@@ -243,6 +243,9 @@ class SmsImportService extends ChangeNotifier {
       int? simSlot,
       AccountResolver? accounts}) {
     final type = t.type;
+    if (t.kind.isFuliza) {
+      return _fuliza(t, simSlot: simSlot, accounts: accounts);
+    }
     final isCashMove = type == TransactionType.transfer;
     final details = [
       if (t.account != null) 'Account: ${SmsParser.maskDigits(t.account!)}',
@@ -302,6 +305,44 @@ class SmsImportService extends ChangeNotifier {
       toAccountId: isCashMove && (accountId == null || toAccountId == null)
           ? null
           : toAccountId,
+      simSlot: simSlot,
+    );
+  }
+
+  /// A Fuliza message, between that SIM's Fuliza loan and its M-Pesa:
+  /// - draw: a transfer Fuliza (SIM n) -> M-Pesa (SIM n). The access fee is
+  ///   its [TransactionModel.fee], so the loan grows by amount + fee and the
+  ///   fee counts as spending once. It has no generic `account` (there is no
+  ///   generic "Fuliza"), only `toAccount` M-Pesa, so it is never a cash
+  ///   move and never income.
+  /// - repayment: a debt repayment M-Pesa (SIM n) -> Fuliza (SIM n), which
+  ///   lowers what is owed.
+  /// Without both account ids (SIM unknown, or no accounts set up) the ids
+  /// are left out; such a transaction is for review only, never saved
+  /// (see `FulizaImporter`).
+  static TransactionModel _fuliza(SmsTransaction t,
+      {int? simSlot, AccountResolver? accounts}) {
+    final walletId = accounts?.forSim(simSlot, AccountKind.mobileMoney)?.id;
+    final loanId = accounts?.forSim(simSlot, AccountKind.loan)?.id;
+    final known = walletId != null && loanId != null;
+    final isDraw = t.kind == SmsTransactionKind.fulizaDraw;
+    final type = t.type; // transfer or debtRepayment
+    return TransactionModel(
+      description: _description(t),
+      amount: t.amount,
+      type: type,
+      categoryId: DefaultCategories.fixedCategoryFor(type),
+      date: t.date,
+      source: t.source,
+      reference: t.reference,
+      smsText: t.maskedText.length > 1000
+          ? t.maskedText.substring(0, 1000)
+          : t.maskedText,
+      account: isDraw ? null : Account.mpesa,
+      toAccount: isDraw ? Account.mpesa : null,
+      fee: isDraw && (t.fee ?? 0) > 0 ? t.fee : null,
+      accountId: !known ? null : (isDraw ? loanId : walletId),
+      toAccountId: !known ? null : (isDraw ? walletId : loanId),
       simSlot: simSlot,
     );
   }

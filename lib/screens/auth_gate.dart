@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../accounts/account_repository.dart';
+import '../accounts/anchor_log.dart';
 import '../categorization/category_rule_repository.dart';
 import '../data/budget_repository.dart';
 import '../data/transaction_repository.dart';
 import '../data/transaction_store.dart';
 import '../services/auth_service.dart';
+import '../maintenance/ziidi_fix.dart';
+import '../sms/fuliza_import.dart';
 import '../sms/sms_gateway.dart';
 import '../sms/sms_import_service.dart';
 import '../sms/sms_settings.dart';
@@ -124,6 +127,21 @@ class _SignedInScopeState extends State<_SignedInScope>
     // Each SMS goes to the account of the SIM that received it.
     accounts: () => _accounts,
   );
+  late final AnchorKeeper _anchors = AnchorKeeper(_accounts);
+  late final ZiidiFixer _ziidi = ZiidiFixer(
+    repository: FirestoreZiidiFixRepository(uid: widget.user.uid),
+    store: SharedPrefsZiidiFixStore(uid: widget.user.uid),
+    gateway: widget.smsGateway,
+    accounts: () => _accounts,
+  );
+  late final FulizaImporter _fuliza = FulizaImporter(
+    gateway: widget.smsGateway,
+    settings: widget.smsSettings,
+    accounts: () => _accounts,
+    existingIds: () => {for (final t in _store.transactions) t.id},
+    save: (t, key) => _store.addDetected(t, dedupeKey: key),
+    delete: _store.delete,
+  );
   NavigatorState? _navigator;
 
   @override
@@ -173,6 +191,9 @@ class _SignedInScopeState extends State<_SignedInScope>
       categoryRules: _rules,
       accounts: _accounts,
       smsService: _sms,
+      fulizaImporter: _fuliza,
+      ziidiFixer: _ziidi,
+      anchorKeeper: _anchors,
       user: widget.user,
       onSignOut: widget.onSignOut,
     );

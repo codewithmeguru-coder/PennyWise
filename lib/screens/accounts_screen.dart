@@ -1,19 +1,50 @@
 import 'package:flutter/material.dart';
 
 import '../accounts/account_repository.dart';
+import '../accounts/account_balances.dart';
+import '../accounts/anchor_log.dart';
+import '../accounts/balance_assessment.dart';
 import '../accounts/money_account.dart';
+import '../models/transaction_model.dart';
 import '../data/data_exception.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../utils/validators.dart';
+import 'balance_review_screen.dart';
 
 /// Settings › Accounts: the user's own accounts. Rename, set a starting
 /// balance, hide, or add a bank / cash / other account. Accounts are never
 /// deleted here, so no transaction loses its account.
 class AccountsScreen extends StatelessWidget {
-  const AccountsScreen({super.key, required this.accounts});
+  const AccountsScreen({
+    super.key,
+    required this.accounts,
+    this.transactions,
+    this.keeper,
+  });
 
   final AccountStore accounts;
+
+  /// The user's transactions, for balances, SMS suggestions and checks.
+  final List<TransactionModel> Function()? transactions;
+
+  /// Changes starting balances with an audit trail and Undo. Without it
+  /// (older callers, tests) accounts are saved directly.
+  final AnchorKeeper? keeper;
+
+  List<TransactionModel> get _txs => transactions?.call() ?? const [];
+
+  Future<void> _store(MoneyAccount updated, String reason) async {
+    final before = accounts.byId(updated.id);
+    final anchorChanged = before != null &&
+        (before.openingBalance != updated.openingBalance ||
+            before.openingDate != updated.openingDate);
+    if (keeper != null && anchorChanged) {
+      await keeper!.change(updated, reason: reason);
+    } else {
+      await accounts.save(updated);
+    }
+  }
 
   Future<void> _edit(BuildContext context, [MoneyAccount? existing]) async {
     final result = await Navigator.of(context).push<MoneyAccount>(
@@ -26,7 +57,7 @@ class AccountsScreen extends StatelessWidget {
     );
     if (result == null || !context.mounted) return;
     try {
-      await accounts.save(result);
+      await _store(result, 'Edited');
     } on DataException catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
@@ -40,13 +71,14 @@ class AccountsScreen extends StatelessWidget {
       MaterialPageRoute(
         // Hidden ones too, so showing one again later doesn't bring back
         // its older history.
-        builder: (_) => StartOverScreen(accounts: accounts.all),
+        builder: (_) =>
+            StartOverScreen(accounts: accounts.all, transactions: _txs),
       ),
     );
     if (result == null || !context.mounted) return;
     try {
       for (final a in result) {
-        await accounts.save(a);
+        await _store(a, 'Start over');
       }
     } on DataException catch (e) {
       if (context.mounted) {
@@ -62,6 +94,17 @@ class AccountsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Accounts'),
         actions: [
+          if (accounts.all.isNotEmpty && transactions != null)
+            IconButton(
+              tooltip: 'Check balances',
+              icon: const Icon(Icons.fact_check_outlined),
+              onPressed: () =>
+                  Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => BalanceAssessmentScreen(
+                  findings: BalanceAssessment.of(accounts.all, _txs),
+                ),
+              )),
+            ),
           if (accounts.all.isNotEmpty)
             TextButton(
               onPressed: () => _startOver(context),
@@ -114,7 +157,22 @@ class AccountsScreen extends StatelessWidget {
                               '${Formatters.currency(a.openingBalance!)}',
                     if (!a.active) 'Hidden',
                   ].join(' · ')),
-                  trailing: const Icon(Icons.edit_outlined),
+                  trailing: transactions == null
+                      ? const Icon(Icons.edit_outlined)
+                      : IconButton(
+                          tooltip: 'Check balance',
+                          icon: const Icon(Icons.manage_search_rounded),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => BalanceReviewScreen(
+                                accountId: a.id,
+                                accounts: accounts,
+                                transactions: _txs,
+                                keeper: keeper,
+                              ),
+                            ),
+                          ),
+                        ),
                   onTap: () => _edit(context, a),
                 ),
             ],
@@ -156,7 +214,13 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
   late AccountKind _kind = widget.existing?.kind ?? AccountKind.bank;
   late AccountProvider _provider =
       widget.existing?.provider ?? AccountProvider.equity;
+  /// When the starting balance applies. Null means "now" (when saved).
   late DateTime? _openingDate = widget.existing?.openingDate;
+
+  /// The user chose [_openingDate] on purpose. Until then, typing a new
+  /// amount resets it to now: a balance typed today is today's balance, so
+  /// transactions since an older date must not be added on top of it.
+  bool _datePicked = false;
   late bool _active = widget.existing?.active ?? true;
 
   bool get _isNew => widget.existing == null;
@@ -192,7 +256,12 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
     );
-    if (picked != null) setState(() => _openingDate = picked);
+    if (picked != null) {
+      setState(() {
+        _openingDate = picked;
+        _datePicked = true;
+      });
+    }
   }
 
   void _save() {
@@ -285,6 +354,11 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
             ),
             TextFormField(
               controller: _opening,
+              onChanged: (_) {
+                if (!_datePicked && _openingDate != null) {
+                  setState(() => _openingDate = null);
+                }
+              },
               keyboardType: const TextInputType.numberWithOptions(
                   decimal: true, signed: true),
               decoration: InputDecoration(
@@ -307,7 +381,7 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
               contentPadding: EdgeInsets.zero,
               title: Text(_isLoan ? 'Owed on' : 'Starting balance date'),
               subtitle: Text(_openingDate == null
-                  ? 'Today'
+                  ? 'Now (when you save)'
                   : Formatters.shortDate(_openingDate!)),
               trailing: const Icon(Icons.calendar_today_rounded),
               onTap: _pickDate,
@@ -335,9 +409,18 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
 /// deleted: older transactions stay in the history and reports. Pops with
 /// the changed accounts, or null.
 class StartOverScreen extends StatefulWidget {
-  const StartOverScreen({super.key, required this.accounts});
+  const StartOverScreen({
+    super.key,
+    required this.accounts,
+    this.transactions = const [],
+    this.title = 'Start balances over',
+  });
 
   final List<MoneyAccount> accounts;
+
+  /// Used to offer each M-Pesa account's latest SMS balance.
+  final List<TransactionModel> transactions;
+  final String title;
 
   @override
   State<StartOverScreen> createState() => _StartOverScreenState();
@@ -347,6 +430,15 @@ class _StartOverScreenState extends State<StartOverScreen> {
   final _form = GlobalKey<FormState>();
   late final Map<String, TextEditingController> _fields = {
     for (final a in widget.accounts) a.id: TextEditingController(),
+  };
+
+  /// Accounts set from an SMS balance: that balance is as of the message,
+  /// so the anchor is just after it (the message's own transaction is
+  /// already in the figure). Typed amounts are as of now.
+  final _fromSms = <String, DateTime>{};
+  late final _sms = {
+    for (final a in widget.accounts)
+      a.id: ?AccountBalance.latestSmsBalance(a, widget.transactions),
   };
 
   @override
@@ -369,7 +461,10 @@ class _StartOverScreenState extends State<StartOverScreen> {
               // Fuliza is typed as the amount owed: a negative balance.
               final v => a.kind == AccountKind.loan ? -v : v,
             },
-            openingDate: now,
+            openingDate: switch (_fromSms[a.id]) {
+              final at? => at.add(const Duration(milliseconds: 1)),
+              null => now,
+            },
           ),
     ]);
   }
@@ -377,7 +472,7 @@ class _StartOverScreenState extends State<StartOverScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Start balances over')),
+      appBar: AppBar(title: Text(widget.title)),
       body: Form(
         key: _form,
         child: ListView(
@@ -385,17 +480,23 @@ class _StartOverScreenState extends State<StartOverScreen> {
           children: [
             const Text(
               'Type what each account holds right now (check M-Pesa, Ziidi '
-              'and your bank). From now on the balances count only new '
-              'transactions. Older ones stay in your history and reports. '
-              'Leave a box empty to keep that account as it is.',
+              'and your bank), or use the balance from its latest SMS. For '
+              'Fuliza, type what you owe, not your limit. From then on the '
+              'balances count only newer transactions; older ones stay in '
+              'your history and reports. Leave a box empty to skip: that '
+              'account stays marked as not verified.',
               style: TextStyle(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 8),
             for (final a in widget.accounts)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: TextFormField(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                TextFormField(
                   controller: _fields[a.id],
+                  onChanged: (_) => setState(() => _fromSms.remove(a.id)),
                   keyboardType: const TextInputType.numberWithOptions(
                       decimal: true, signed: true),
                   decoration: InputDecoration(
@@ -412,6 +513,28 @@ class _StartOverScreenState extends State<StartOverScreen> {
                               (v ?? '').trim().startsWith('-')
                           ? 'Enter the amount owed, without a minus'
                           : Validators.optionalBalance(v),
+                ),
+                if (_sms[a.id] case final s?)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: _fromSms.containsKey(a.id)
+                        ? Text(
+                            'As of the SMS of ${Formatters.shortDate(s.at)}',
+                            style: const TextStyle(
+                                color: AppColors.textSecondary, fontSize: 12),
+                          )
+                        : ActionChip(
+                            avatar: const Icon(Icons.sms_outlined, size: 16),
+                            label: Text('Use SMS balance '
+                                '${Formatters.currency(s.amount)} '
+                                '(${Formatters.shortDate(s.at)})'),
+                            onPressed: () => setState(() {
+                              _fields[a.id]!.text = s.amount.toStringAsFixed(2);
+                              _fromSms[a.id] = s.at;
+                            }),
+                          ),
+                  ),
+                  ],
                 ),
               ),
             const SizedBox(height: 24),
