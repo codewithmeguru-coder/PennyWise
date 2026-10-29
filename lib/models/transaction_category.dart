@@ -13,19 +13,52 @@ class TransactionCategory {
     required this.name,
     required this.icon,
     required this.type,
+    this.isCustom = false,
+    this.active = true,
   });
 
+  /// Stored on transactions, rules and budgets. Never changes, even when a
+  /// custom category is renamed.
   final String id;
   final String name;
   final IconData icon;
   final TransactionType type;
+
+  /// Added by the user (see `CustomCategory`), not built in.
+  final bool isCustom;
+
+  /// False for a deactivated custom category: it still names the records
+  /// that use it, but isn't offered for new ones.
+  final bool active;
 }
 
-/// The fixed starter categories. Custom categories come in a later stage.
+/// Every category: the fixed built-in ones, plus the signed-in user's own
+/// (set by `CategoryRegistry`). All lookups go through here, so screens,
+/// reports, charts, search, suggestions and budgets agree on names.
 class DefaultCategories {
   DefaultCategories._();
 
-  static const List<TransactionCategory> all = [
+  /// The user's own categories, after the built-in ones. Empty when signed
+  /// out; replaced whenever they change.
+  static List<TransactionCategory> _custom = const [];
+
+  /// Called by `CategoryRegistry` with the signed-in user's categories.
+  static void useCustom(List<TransactionCategory> custom) =>
+      _custom = List.unmodifiable(custom);
+
+  /// On sign-out, so one profile's categories never show for another.
+  static void clearCustom() => _custom = const [];
+
+  static List<TransactionCategory> get custom => _custom;
+
+  /// Built-in first, then the user's own (active and inactive).
+  static List<TransactionCategory> get all => [...builtIn, ..._custom];
+
+  /// A known custom category that has been deactivated.
+  static bool isInactive(String id) =>
+      _custom.any((c) => c.id == id && !c.active);
+
+  static const List<TransactionCategory> builtIn = [
     // Expense categories
     TransactionCategory(
       id: 'food',
@@ -66,7 +99,7 @@ class DefaultCategories {
     ),
     TransactionCategory(
       id: 'airtime_data',
-      name: 'Airtime & Data',
+      name: 'Airtime, Data & Minutes',
       icon: Icons.phone_android_rounded,
       type: TransactionType.expense,
     ),
@@ -227,8 +260,9 @@ class DefaultCategories {
   /// The categories the user can pick for [type]. A refund gives money back
   /// for a purchase, so it uses the expense categories (not fees).
   ///
-  /// [retired] categories are left out unless [keep] names one, so editing
-  /// an older transaction still shows the category it has.
+  /// [retired] and deactivated custom categories are left out unless
+  /// [keep] names one, so editing an older transaction still shows the
+  /// category it has.
   static List<TransactionCategory> forType(TransactionType type,
       {String? keep}) {
     final lookup =
@@ -237,7 +271,8 @@ class DefaultCategories {
         .where((c) =>
             c.type == lookup &&
             !(type == TransactionType.refund && c.id == 'fees') &&
-            (!retired.contains(c.id) || c.id == keep))
+            (!retired.contains(c.id) || c.id == keep) &&
+            (c.active || c.id == keep))
         .toList();
   }
 
@@ -260,6 +295,15 @@ class DefaultCategories {
         _ => throw ArgumentError('$type has no fixed category'),
       };
 
-  static TransactionCategory byId(String id) =>
-      all.firstWhere((c) => c.id == id, orElse: () => unknown);
+  /// The category with [id], inactive ones included (they still name past
+  /// records); [unknown] when there is none.
+  static TransactionCategory byId(String id) {
+    for (final c in builtIn) {
+      if (c.id == id) return c;
+    }
+    for (final c in _custom) {
+      if (c.id == id) return c;
+    }
+    return unknown;
+  }
 }

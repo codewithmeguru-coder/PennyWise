@@ -110,4 +110,13 @@ class FakeSmsSettings implements SmsSettings {
   @override
   Future<void> setFulizaImportIds(List<String> ids) async =>
       fulizaIds = [...ids];
+
+  /// Off by default, like the real setting.
+  bool autoFuliza = false;
+
+  @override
+  Future<bool> autoFulizaImport() async => autoFuliza;
+
+  @override
+  Future<void> setAutoFulizaImport(bool on) async => autoFuliza = on;
 }

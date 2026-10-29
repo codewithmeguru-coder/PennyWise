@@ -4,6 +4,7 @@ import '../data/transaction_store.dart';
 import '../models/transaction_model.dart';
 import '../utils/transaction_search.dart';
 import '../widgets/empty_state.dart';
+import '../models/fuliza_link.dart';
 import '../widgets/search_field.dart';
 import 'needs_review_screen.dart';
 import '../widgets/transaction_tile.dart';
@@ -173,6 +174,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
                 final items = TransactionSearch.filter(
                     _applyFilter(store.transactions), _query);
+                final links = FulizaLinks(store.transactions);
 
                 if (items.isEmpty) {
                   return EmptyState(
@@ -191,6 +193,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       const Divider(height: 1, indent: 72),
                   itemBuilder: (context, index) => TransactionTile(
                     transaction: items[index],
+                    paidWithFuliza: links.paidWithFuliza(items[index]),
                     onTap: () => widget.onTransactionTap(items[index]),
                     onLongPress: widget.onTransactionLongPress == null
                         ? null

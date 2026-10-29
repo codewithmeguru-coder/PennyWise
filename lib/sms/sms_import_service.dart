@@ -18,7 +18,9 @@ import 'sms_transaction.dart';
 /// Saves a detected transaction unless it already exists; returns true if
 /// it was added. In the app this is `TransactionStore.addDetected`.
 typedef SaveDetected = Future<bool> Function(
-    TransactionModel transaction, String dedupeKey);
+  TransactionModel transaction,
+  String dedupeKey,
+);
 
 /// Automatic transaction detection for the signed-in user.
 ///
@@ -170,8 +172,10 @@ class SmsImportService extends ChangeNotifier {
   /// skipped, so running it again is harmless. Returns how many were added.
   Future<int> scanRecent({int days = 30}) async {
     if (!isActive) return 0;
-    return _scanSince(DateTime.now().subtract(Duration(days: days)),
-        advanceLastScan: false);
+    return _scanSince(
+      DateTime.now().subtract(Duration(days: days)),
+      advanceLastScan: false,
+    );
   }
 
   /// Parses, categorises and saves one SMS. Returns the saved transaction,
@@ -188,8 +192,11 @@ class SmsImportService extends ChangeNotifier {
   Future<TransactionModel?> _handleNow(RawSms sms) async {
     if (!_enabled) return null; // turned off while this was queued
 
-    final parsed =
-        SmsParser.parse(sender: sms.sender, body: sms.body, date: sms.date);
+    final parsed = SmsParser.parse(
+      sender: sms.sender,
+      body: sms.body,
+      date: sms.date,
+    );
     if (parsed == null) {
       // A completed transaction we can't read is counted (code only), so
       // Settings can say so instead of losing it silently. Promotions and
@@ -200,20 +207,30 @@ class SmsImportService extends ChangeNotifier {
       }
       return null;
     }
-    if (parsed.kind.isFuliza) {
-      // Read correctly, but held until loan accounts exist. Not marked as
-      // handled, so a later import brings it in once that's possible.
-      await _recordSkipped(SkipReason.fulizaWaiting, parsed.dedupeKey);
-      return null;
-    }
-
     final key = parsed.dedupeKey;
     // First check, on the device: already handled here (even if the user
-    // deleted it afterwards, we don't bring it back).
+    // deleted it afterwards, we don't bring it back). Fuliza loans and
+    // repayments brought in by Settings › Fuliza history are handled too.
     if ((await _settings.handledKeys()).contains(key)) return null;
 
-    final transaction = toTransaction(parsed,
-        rules: _rules(), simSlot: sms.simSlot, accounts: _accounts());
+    final transaction = toTransaction(
+      parsed,
+      rules: _rules(),
+      simSlot: sms.simSlot,
+      accounts: _accounts(),
+    );
+    if (parsed.kind.isFuliza &&
+        (!await autoFulizaImport() ||
+            transaction.accountId == null ||
+            transaction.toAccountId == null)) {
+      // Held, not saved, unless the user turned on automatic Fuliza import
+      // (off by default, so installing or opening the app never starts
+      // it), and only with both its SIM's M-Pesa and Fuliza accounts known
+      // (never guessed). Not marked handled, so Settings › Fuliza history
+      // or a later import can still bring it in.
+      await _recordSkipped(SkipReason.fulizaWaiting, key);
+      return null;
+    }
     // Second check, in Firestore: the repository only creates the document
     // if no document with this key exists (e.g. imported on another phone).
     final added = await _save(transaction, key);
@@ -238,10 +255,12 @@ class SmsImportService extends ChangeNotifier {
   /// and cash moves to the Cash account. If the SIM is unknown or has no
   /// account, no account id is set (it shows as "SIM not recorded") rather
   /// than guessing: SIM 1 and SIM 2 are never mixed.
-  static TransactionModel toTransaction(SmsTransaction t,
-      {Map<String, CategoryRule> rules = const {},
-      int? simSlot,
-      AccountResolver? accounts}) {
+  static TransactionModel toTransaction(
+    SmsTransaction t, {
+    Map<String, CategoryRule> rules = const {},
+    int? simSlot,
+    AccountResolver? accounts,
+  }) {
     final type = t.type;
     if (t.kind.isFuliza) {
       return _fuliza(t, simSlot: simSlot, accounts: accounts);
@@ -267,10 +286,12 @@ class SmsImportService extends ChangeNotifier {
         ?.id;
     // Cash may be hidden from Home, but an agent withdrawal still moves
     // money between it and the SIM; without it the SIM side would be lost.
-    final cashId = (accounts?.firstOf(AccountKind.cash) ??
-            accounts?.firstOf(AccountKind.cash, includeHidden: true))
-        ?.id;
-    final savingsId = type == TransactionType.savingsContribution ||
+    final cashId =
+        (accounts?.firstOf(AccountKind.cash) ??
+                accounts?.firstOf(AccountKind.cash, includeHidden: true))
+            ?.id;
+    final savingsId =
+        type == TransactionType.savingsContribution ||
             type == TransactionType.savingsWithdrawal
         ? accounts?.forSim(simSlot, AccountKind.savings, provider: provider)?.id
         : null;
@@ -279,8 +300,8 @@ class SmsImportService extends ChangeNotifier {
     final (String? accountId, String? toAccountId) = walletId == null
         ? (null, null)
         : isCashMove
-            ? (isDeposit ? (cashId, walletId) : (walletId, cashId))
-            : (walletId, savingsId);
+        ? (isDeposit ? (cashId, walletId) : (walletId, cashId))
+        : (walletId, savingsId);
     return TransactionModel(
       description: _description(t),
       amount: t.amount,
@@ -320,8 +341,11 @@ class SmsImportService extends ChangeNotifier {
   /// Without both account ids (SIM unknown, or no accounts set up) the ids
   /// are left out; such a transaction is for review only, never saved
   /// (see `FulizaImporter`).
-  static TransactionModel _fuliza(SmsTransaction t,
-      {int? simSlot, AccountResolver? accounts}) {
+  static TransactionModel _fuliza(
+    SmsTransaction t, {
+    int? simSlot,
+    AccountResolver? accounts,
+  }) {
     final walletId = accounts?.forSim(simSlot, AccountKind.mobileMoney)?.id;
     final loanId = accounts?.forSim(simSlot, AccountKind.loan)?.id;
     final known = walletId != null && loanId != null;
@@ -376,14 +400,19 @@ class SmsImportService extends ChangeNotifier {
     }
     _incoming ??= _gateway
         .incoming(senders: SmsParser.allSenders)
-        .listen((sms) => handle(sms).catchError((Object e) {
-              debugPrint('Could not save detected transaction: $e');
-              return null;
-            }));
+        .listen(
+          (sms) => handle(sms).catchError((Object e) {
+            debugPrint('Could not save detected transaction: $e');
+            return null;
+          }),
+        );
     await _scanSince(_lastScan ?? DateTime.now(), advanceLastScan: true);
   }
 
-  Future<int> _scanSince(DateTime since, {required bool advanceLastScan}) async {
+  Future<int> _scanSince(
+    DateTime since, {
+    required bool advanceLastScan,
+  }) async {
     if (_isScanning) return 0;
     _isScanning = true;
     _lastError = null;
@@ -397,7 +426,9 @@ class SmsImportService extends ChangeNotifier {
     DateTime? lastOk;
     try {
       final messages = await _gateway.readInbox(
-          senders: SmsParser.allSenders, since: since);
+        senders: SmsParser.allSenders,
+        since: since,
+      );
       for (final sms in messages) {
         if (await handle(sms) != null) added++;
         lastOk = sms.date;
@@ -433,6 +464,22 @@ class SmsImportService extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) notifyListeners();
+  }
+
+  /// Automatic Fuliza import (see [SmsSettings.autoFulizaImport]): off
+  /// until the user turns it on. Off too if the setting can't be read.
+  Future<bool> autoFulizaImport() async {
+    try {
+      return await _settings.autoFulizaImport();
+    } catch (e) {
+      debugPrint('Fuliza import setting unreadable, treated as off: $e');
+      return false;
+    }
+  }
+
+  Future<void> setAutoFulizaImport(bool on) async {
+    await _settings.setAutoFulizaImport(on);
+    _notify();
   }
 
   @override

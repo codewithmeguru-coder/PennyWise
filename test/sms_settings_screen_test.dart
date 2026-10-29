@@ -11,7 +11,12 @@ Future<void> openSettings(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Finder get detectionSwitch => find.byType(Switch);
+// The detection switch, not "Import Fuliza automatically" below it.
+Finder get detectionSwitch => find.descendant(
+      of: find.widgetWithText(
+          SwitchListTile, 'Automatic Transaction Detection'),
+      matching: find.byType(Switch),
+    );
 
 bool switchValue(WidgetTester tester) =>
     tester.widget<Switch>(detectionSwitch).value;
@@ -164,6 +169,7 @@ void main() {
     expect(
         find.text('New M-Pesa transaction detected: KSh 500.00 — Naivas'),
         findsOneWidget);
+    await showRecent(tester);
     expect(find.text('Naivas'), findsOneWidget); // in Recent transactions
     expect(find.textContaining('M-Pesa'), findsWidgets);
 

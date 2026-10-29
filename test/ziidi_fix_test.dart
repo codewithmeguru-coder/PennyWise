@@ -406,4 +406,48 @@ void main() {
     expect(b, containsPair('category', 'uncategorized'));
     expect(b, containsPair('reference', 'UJZAB1CD01'));
   });
+
+  group('a real Ziidi record edited after import', () {
+    test('is listed on its own, and the normal fix leaves it alone',
+        () async {
+      final fixer = await setUpFixer([save1, edited]);
+      final p = await fixer.preview();
+      expect(p.changes.map((c) => c.record.id), [save1.id]);
+      expect(p.edited.map((c) => c.record.id), [edited.id]);
+      expect(p.skipped['Edited by you after import'], 1);
+      await fixer.fix(p);
+      expect(repo.records[edited.id]!.type, 'expense');
+      expect(repo.records[edited.id]!.category, 'food');
+    });
+
+    test('is fixed only by fixEdited, with a backup first and exact Undo',
+        () async {
+      final fixer = await setUpFixer([edited]);
+      final p = await fixer.preview();
+      expect(p.changes, isEmpty);
+      final r = await fixer.fixEdited(p);
+      expect(r.done, 1);
+      expect(store.saved.single['id'], edited.id); // backed up first
+      final fixed = repo.records[edited.id]!;
+      expect(fixed.type, 'savings_contribution');
+      expect(fixed.amount, edited.amount);
+      expect(fixed.marker, (type: 'expense', category: 'food'));
+      // It no longer appears as edited.
+      expect((await fixer.preview()).edited, isEmpty);
+
+      await fixer.undo();
+      final back = repo.records[edited.id]!;
+      expect(back.type, 'expense');
+      expect(back.category, 'food');
+      expect(back.marker, isNull);
+    });
+
+    test('a backup that cannot be checked stops before any write', () async {
+      final fixer = await setUpFixer([edited]);
+      store.corruptReadBack = true;
+      final r = await fixer.fixEdited(await fixer.preview());
+      expect(r.error, contains('backup'));
+      expect(repo.records[edited.id]!.type, 'expense');
+    });
+  });
 }

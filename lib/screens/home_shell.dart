@@ -1,19 +1,26 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../accounts/account_repository.dart';
 import '../accounts/anchor_log.dart';
 import '../accounts/money_account.dart';
+import '../categorization/category_registry.dart';
 import '../categorization/category_rule.dart';
 import '../categorization/category_rule_repository.dart';
 import '../data/budget_repository.dart';
+import '../data/category_budget_repository.dart';
 import '../data/data_exception.dart';
 import '../data/transaction_store.dart';
 import '../models/duplicate_finder.dart';
+import '../models/month_selection.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../services/auth_service.dart';
+import '../services/avatar_store.dart';
+import '../services/photo_picker.dart';
+import '../maintenance/sim_backfill.dart';
 import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
 import '../sms/sms_import_service.dart';
@@ -28,6 +35,7 @@ import 'dashboard_screen.dart';
 import 'needs_review_screen.dart';
 import 'settings_screen.dart';
 import 'transactions_screen.dart';
+import 'trends_screen.dart';
 
 /// The main app frame: bottom navigation bar, the current tab, and the
 /// "Add" button that opens [AddTransactionScreen]. It also performs the
@@ -37,18 +45,36 @@ class HomeShell extends StatefulWidget {
     super.key,
     required this.store,
     required this.budgetRepository,
+    this.categoryBudgets,
+    this.categories,
     required this.categoryRules,
     required this.accounts,
     required this.smsService,
     this.fulizaImporter,
     this.ziidiFixer,
+    this.simBackfill,
     this.anchorKeeper,
     required this.user,
     required this.onSignOut,
+    this.avatar,
+    this.photoPicker,
   });
 
   final TransactionStore store;
   final BudgetRepository budgetRepository;
+
+  /// Per-category monthly limits. Null: categories show spending only.
+  final CategoryBudgetRepository? categoryBudgets;
+
+  /// The user's own categories (see [CategoryRegistry]). Every tab rebuilds
+  /// when they change, so a rename shows everywhere at once.
+  final CategoryRegistry? categories;
+
+  /// The user's own profile photo (Settings › Profile).
+  final AvatarStore? avatar;
+
+  /// Chooses that photo from the gallery.
+  final PhotoPicker? photoPicker;
 
   /// Categories learned from the user's corrections.
   final CategoryRuleStore categoryRules;
@@ -64,6 +90,9 @@ class HomeShell extends StatefulWidget {
 
   /// Settings › Fix old Ziidi records (see [ZiidiFixer]).
   final ZiidiFixer? ziidiFixer;
+
+  /// Needs review › Account › "Fill in SIMs from your messages".
+  final SimBackfill? simBackfill;
 
   /// Changes starting balances with an audit trail and Undo.
   final AnchorKeeper? anchorKeeper;
@@ -86,6 +115,10 @@ class _HomeShellState extends State<HomeShell> {
 
   StreamSubscription<TransactionModel>? _detectedSub;
 
+  /// The month Home's overview and Budgets show; moving it on one moves it
+  /// on the other.
+  final _month = MonthSelection();
+
   @override
   void initState() {
     super.initState();
@@ -95,6 +128,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void dispose() {
     _detectedSub?.cancel();
+    _month.dispose();
     super.dispose();
   }
 
@@ -176,13 +210,26 @@ class _HomeShellState extends State<HomeShell> {
     _showMessage('Starting balances saved');
   }
 
+  /// Month-by-month trends, ending at the month Home and Budgets show.
+  void _openTrends() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => TrendsScreen(store: widget.store, month: _month),
+    ));
+  }
+
   void _openSettings() {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => SettingsScreen(
         smsService: widget.smsService,
         categoryRules: widget.categoryRules,
+        categories: widget.categories,
         fulizaImporter: widget.fulizaImporter,
         ziidiFixer: widget.ziidiFixer,
+        transactions: widget.store,
+        accounts: widget.accounts.all,
+        user: widget.user,
+        avatar: widget.avatar,
+        photoPicker: widget.photoPicker,
       ),
     ));
   }
@@ -361,11 +408,43 @@ class _HomeShellState extends State<HomeShell> {
     _showMessage('Restored "${t.description}"');
   }
 
+  /// Needs review › Account: saves [after] (only its account differs from
+  /// [before]) and offers Undo, which puts [before] back exactly.
+  Future<void> _assignAccount(
+      TransactionModel before, TransactionModel after) async {
+    try {
+      await widget.store.update(after);
+    } on DataException catch (e) {
+      _showMessage(e.message);
+      return;
+    }
+    if (!mounted) return;
+    final name = widget.accounts.byId(after.accountId)?.name ?? 'the account';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('"${after.description}" is now on $name'),
+      behavior: SnackBarBehavior.floating,
+      action: SnackBarAction(
+        label: 'Undo',
+        onPressed: () async {
+          try {
+            await widget.store.update(before);
+          } on DataException catch (e) {
+            _showMessage(e.message);
+          }
+        },
+      ),
+    ));
+  }
+
   void _openNeedsReview() {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => NeedsReviewScreen(
         store: widget.store,
         onCorrect: _correctCategory,
+        accounts: widget.accounts,
+        onAssign: _assignAccount,
+        onEdit: _openTransactionForm,
+        simBackfill: widget.simBackfill,
       ),
     ));
   }
@@ -466,7 +545,10 @@ class _HomeShellState extends State<HomeShell> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Sign out?'),
-        content: _SignedInAs(user: widget.user),
+        content: _SignedInAs(
+          user: widget.user,
+          photo: widget.avatar?.photo,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -509,6 +591,11 @@ class _HomeShellState extends State<HomeShell> {
         accounts: widget.accounts,
         onManageAccounts: _openAccounts,
         onSetBalances: _setBalances,
+        budgetRepository: widget.budgetRepository,
+        categoryBudgets: widget.categoryBudgets,
+        month: _month,
+        onOpenBudgets: () => setState(() => _currentIndex = 2),
+        onOpenTrends: _openTrends,
       ),
       TransactionsScreen(
         store: widget.store,
@@ -521,6 +608,9 @@ class _HomeShellState extends State<HomeShell> {
         store: widget.store,
         budgetRepository: widget.budgetRepository,
         onOpenMenu: _openMenu,
+        month: _month,
+        categoryBudgets: widget.categoryBudgets,
+        onOpenTrends: _openTrends,
       ),
     ];
 
@@ -533,9 +623,16 @@ class _HomeShellState extends State<HomeShell> {
         onSelectTab: (index) => setState(() => _currentIndex = index),
         onOpenSettings: _openSettings,
         onSignOut: _confirmSignOut,
+        avatar: widget.avatar,
       ),
       // IndexedStack keeps each tab's state (scroll position, filter).
-      body: IndexedStack(index: _currentIndex, children: pages),
+      body: widget.categories == null
+          ? IndexedStack(index: _currentIndex, children: pages)
+          : ListenableBuilder(
+              listenable: widget.categories!,
+              builder: (context, _) =>
+                  IndexedStack(index: _currentIndex, children: pages),
+            ),
       floatingActionButton: _currentIndex == 2
           ? null
           : FloatingActionButton.extended(
@@ -571,9 +668,10 @@ class _HomeShellState extends State<HomeShell> {
 
 /// Who is signed in: Google profile picture (or an initial) plus name/email.
 class _SignedInAs extends StatelessWidget {
-  const _SignedInAs({required this.user});
+  const _SignedInAs({required this.user, this.photo});
 
   final AppUser user;
+  final Uint8List? photo;
 
   @override
   Widget build(BuildContext context) {
@@ -581,7 +679,7 @@ class _SignedInAs extends StatelessWidget {
 
     return Row(
       children: [
-        UserAvatar(user: user),
+        UserAvatar(user: user, customImage: photo),
         const SizedBox(width: 12),
         Expanded(
           child: Column(

@@ -14,7 +14,7 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Continue with Google'), findsOneWidget);
 
-    await tester.tap(find.text('Create an account'));
+    await scrollAndTap(tester, 'Create an account'); // below "Forgot password?"
     await tester.pumpAndSettle();
     expect(find.text('Create account'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Continue with Google'), 200,
@@ -38,7 +38,7 @@ void main() {
       (tester) async {
     await pumpApp(tester, auth: FakeAuthService());
 
-    await tester.tap(find.text('Create an account'));
+    await scrollAndTap(tester, 'Create an account'); // below "Forgot password?"
     await tester.pumpAndSettle();
     await scrollAndTap(tester, 'Continue with Google');
 

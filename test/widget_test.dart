@@ -15,6 +15,7 @@ void main() {
 
     expect(find.text('Available balance'), findsOneWidget);
     expect(find.text('KSh 64,150.00'), findsOneWidget); // 65,000 - 850
+    await showRecent(tester);
     expect(find.text('Recent transactions'), findsOneWidget);
     expect(find.text('Lunch'), findsOneWidget);
   });
@@ -58,6 +59,7 @@ void main() {
       (WidgetTester tester) async {
     await pumpApp(tester, repository: FakeTransactionRepository());
 
+    await showRecent(tester);
     expect(find.text('No transactions yet'), findsOneWidget);
     expect(find.text('KSh 0.00'), findsWidgets);
   });
@@ -80,6 +82,7 @@ void main() {
     expect(saved.description, 'Groceries');
     expect(saved.amount, 1250.5);
     expect(saved.categoryId, 'shopping');
+    await showRecent(tester);
     expect(find.text('Groceries'), findsOneWidget);
   });
 
@@ -126,6 +129,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.items.map((t) => t.id), isNot(contains('t1')));
+    await showRecent(tester);
     expect(find.text('Lunch'), findsNothing);
   });
 
@@ -135,14 +139,17 @@ void main() {
       ..loadError = const DataException('Can\'t reach the server.');
     await pumpApp(tester, repository: repo);
 
+    await showRecent(tester);
     expect(find.text('Can\'t reach the server.'), findsOneWidget);
 
     repo.loadError = null;
-    await tester.ensureVisible(find.text('Retry'));
+    // The monthly overview offers a Retry too; this is the list's.
+    await tester.ensureVisible(find.text('Retry').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.text('Retry').last);
     await tester.pumpAndSettle();
 
+    await showRecent(tester);
     expect(find.text('Lunch'), findsOneWidget);
   });
 
@@ -198,7 +205,7 @@ void main() {
       (WidgetTester tester) async {
     await pumpApp(tester, auth: FakeAuthService());
 
-    await tester.tap(find.text('Create an account'));
+    await scrollAndTap(tester, 'Create an account'); // below "Forgot password?"
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Name'), 'Ann');

@@ -27,6 +27,15 @@ class FakeAuthService implements AuthService {
   FakeGoogleOutcome googleOutcome = FakeGoogleOutcome.success;
   int googleCalls = 0;
 
+  /// Every address a reset was requested for, in order.
+  final resetRequests = <String>[];
+
+  /// When set, the next [sendPasswordReset] throws it.
+  AuthException? nextResetError;
+
+  /// While set, [sendPasswordReset] waits for it (to see the loading state).
+  Completer<void>? resetHold;
+
   @override
   Stream<AppUser?> get userChanges async* {
     yield _user;
@@ -70,6 +79,17 @@ class FakeAuthService implements AuthService {
         _set(googleUser);
         return true;
     }
+  }
+
+  @override
+  Future<void> sendPasswordReset(String email) async {
+    resetRequests.add(email);
+    if (resetHold case final h?) await h.future;
+    if (nextResetError case final e?) {
+      nextResetError = null;
+      throw e;
+    }
+    // Known or unknown address: the same quiet success, as with Firebase.
   }
 
   @override

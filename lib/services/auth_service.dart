@@ -62,6 +62,15 @@ abstract class AuthService {
   /// Throws an [AuthException] if sign-in failed.
   Future<bool> signInWithGoogle();
 
+  /// Asks Firebase to email a password-reset link to [email].
+  ///
+  /// Completes normally whether or not an account uses that email, so the
+  /// app never reveals who is registered (the project also has Firebase's
+  /// email enumeration protection on). Throws an [AuthException] only for
+  /// problems the user can act on: an invalid address, no connection, or
+  /// too many requests.
+  Future<void> sendPasswordReset(String email);
+
   Future<void> signOut();
 }
 
@@ -213,6 +222,44 @@ class FirebaseAuthService implements AuthService {
         return 'Google sign-in isn\'t enabled for this app yet.';
       default:
         return messageForCode(code);
+    }
+  }
+
+  @override
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      if (resetMessageForCode(e.code) case final message?) {
+        throw AuthException(message);
+      }
+      // No such account, or a disabled one: say nothing different.
+    } catch (e) {
+      debugPrint('Password reset failed: $e');
+      throw const AuthException(
+          'Couldn\'t send the reset email. Please try again.');
+    }
+  }
+
+  /// What to tell the user when a reset request fails with [code], or null
+  /// when it should look exactly like success: whether an account exists,
+  /// or is disabled, must never show.
+  static String? resetMessageForCode(String code) {
+    switch (code) {
+      case 'user-not-found':
+      case 'user-disabled':
+        return null;
+      case 'invalid-email':
+        return 'That email address doesn\'t look right.';
+      case 'missing-email':
+        return 'Enter your email.';
+      case 'network-request-failed':
+        return 'No internet connection. Check your network and try again.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait a moment and try again.';
+      default:
+        debugPrint('Password reset failed: $code');
+        return 'Couldn\'t send the reset email. Please try again.';
     }
   }
 

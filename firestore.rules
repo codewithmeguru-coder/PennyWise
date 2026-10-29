@@ -384,6 +384,93 @@ service cloud.firestore {
           && isValidBudget(request.resource.data, monthId)
           && stampedNow('updatedAt');
       }
+
+      // ---- users/{uid}/categoryBudgets/{YYYY-MM}_{categoryId} -------------
+
+      // Per-category monthly limits, separate from the overall budget above
+      // (which they never change). The document id is "YYYY-MM_categoryId"
+      // (e.g. "2026-10_food"), so there's one limit per category per month.
+      // Category ids are checked by shape, not against a fixed list, so new
+      // categories need no rules change.
+      function isValidCategoryBudget(data, budgetId) {
+        return data.keys().hasAll(['month', 'categoryId', 'limit', 'updatedAt'])
+          && data.keys().hasOnly(['month', 'categoryId', 'limit', 'updatedAt'])
+          && data.month is string
+          && data.month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && data.categoryId is string
+          && data.categoryId.matches('^[a-z_]{1,40}$')
+          && budgetId == data.month + '_' + data.categoryId
+          && data.limit is number
+          && data.limit > 0 && data.limit < 1000000000;
+      }
+
+      match /categoryBudgets/{budgetId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidCategoryBudget(request.resource.data, budgetId)
+          && stampedNow('updatedAt');
+      }
+
+      // ---- users/{uid}/categories/{categoryId} -----------------------------
+
+      // The user's own categories (the built-in ones live in the app). The id
+      // is generated once ("c_" + lower-case letters, never like a built-in
+      // id) and never changes, so renaming keeps every record that uses it.
+      // There is no delete: a category is deactivated instead, so past
+      // transactions, rules and limits always find it. Name uniqueness can't
+      // be checked here (rules can't search other documents); the app does.
+      function isValidCategory(data) {
+        return data.keys().hasAll(['name', 'type', 'icon', 'active',
+                                   'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(['name', 'type', 'icon', 'active',
+                                  'createdAt', 'updatedAt'])
+          && data.name is string
+          && data.name.size() > 0 && data.name.size() <= 30
+          && data.type in ['expense', 'income']
+          && data.icon is string
+          && data.icon.matches('^[a-z_]{1,30}$')
+          && data.active is bool;
+      }
+
+      match /categories/{categoryId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && categoryId.matches('^c_[a-z]{6,30}$')
+          && isValidCategory(request.resource.data)
+          && stampedNow('createdAt')
+          && stampedNow('updatedAt');
+        allow update: if isOwner(userId)
+          && isValidCategory(request.resource.data)
+          && request.resource.data.type == resource.data.type
+          && createdAtUnchanged()
+          && stampedNow('updatedAt');
+        allow delete: if false;
+      }
+
+      // ---- users/{uid}/private/avatar ------------------------------------
+
+      // The user's own profile photo, one small document (no Storage): a
+      // JPEG, PNG or WebP of at most 250 KB, stored as base64 text, which
+      // starts "/9j/", "iVBORw0KGgo", or "UklGR" + 6 characters (the file
+      // size) + "XRUJQ" ("RIFF....WEBP": not WAV, AVI or other RIFF files).
+      // Only this one path; nothing else under private/ is allowed.
+      function isValidAvatar(data) {
+        return data.keys().hasAll(['imageBase64', 'updatedAt'])
+          && data.keys().hasOnly(['imageBase64', 'updatedAt'])
+          && data.imageBase64 is string
+          && data.imageBase64.size() > 0
+          && data.imageBase64.size() <= 341336
+          && data.imageBase64.matches(
+              '^(/9j/|iVBORw0KGgo|UklGR[A-Za-z0-9+/]{6}XRUJQ)'
+              + '[A-Za-z0-9+/]*={0,2}$');
+      }
+
+      match /private/avatar {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidAvatar(request.resource.data)
+          && stampedNow('updatedAt');
+      }
     }
   }
 }

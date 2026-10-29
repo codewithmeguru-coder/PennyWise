@@ -9,6 +9,9 @@ import 'fake_app_lock.dart';
 import 'fake_auth_service.dart';
 import 'fake_category_rules.dart';
 import 'fake_budget_repository.dart';
+import 'fake_category_budget_repository.dart';
+import 'fake_avatar.dart';
+import 'fake_category_repository.dart';
 import 'fake_sms.dart';
 import 'fake_transaction_repository.dart';
 
@@ -18,28 +21,41 @@ Future<FakeTransactionRepository> pumpApp(
   WidgetTester tester, {
   FakeTransactionRepository? repository,
   FakeBudgetRepository? budgets,
+  FakeCategoryBudgetRepository? categoryBudgets,
+  FakeCategoryRepository? categories,
+  FakeAvatarRepository Function(String uid)? avatars,
+  FakePhotoPicker? photoPicker,
   FakeAuthService? auth,
   FakeSmsGateway? sms,
   FakeSmsSettings? smsSettings,
+  FakeSmsSettings Function(String uid)? smsSettingsForUser,
   AppLockController? appLock,
   FakeCategoryRuleRepository? categoryRules,
   FakeAccountRepository? accounts,
 }) async {
   final repo = repository ?? FakeTransactionRepository(testTransactions());
   final budgetRepo = budgets ?? FakeBudgetRepository();
-  await tester.pumpWidget(PennyWiseApp(
-    authService:
-        auth ?? FakeAuthService(signedInAs: FakeAuthService.testUser),
-    repositoryForUser: (_) => repo,
-    budgetRepositoryForUser: (_) => budgetRepo,
-    smsGateway: sms ?? FakeSmsGateway(),
-    smsSettingsForUser: (_) => smsSettings ?? FakeSmsSettings(),
-    categoryRulesForUser: (_) =>
-        categoryRules ?? FakeCategoryRuleRepository(),
-    accountsForUser: (_) => accounts ?? FakeAccountRepository(),
-    // App Lock off, in memory (no secure storage or biometrics in tests).
-    appLock: appLock ?? testAppLock(),
-  ));
+  await tester.pumpWidget(
+    PennyWiseApp(
+      authService:
+          auth ?? FakeAuthService(signedInAs: FakeAuthService.testUser),
+      repositoryForUser: (_) => repo,
+      budgetRepositoryForUser: (_) => budgetRepo,
+      categoryBudgetsForUser: (_) =>
+          categoryBudgets ?? FakeCategoryBudgetRepository(),
+      categoriesForUser: (_) => categories ?? FakeCategoryRepository(),
+      avatarForUser: avatars ?? (_) => FakeAvatarRepository(),
+      photoPicker: photoPicker ?? FakePhotoPicker(),
+      smsGateway: sms ?? FakeSmsGateway(),
+      smsSettingsForUser:
+          smsSettingsForUser ?? (_) => smsSettings ?? FakeSmsSettings(),
+      categoryRulesForUser: (_) =>
+          categoryRules ?? FakeCategoryRuleRepository(),
+      accountsForUser: (_) => accounts ?? FakeAccountRepository(),
+      // App Lock off, in memory (no secure storage or biometrics in tests).
+      appLock: appLock ?? testAppLock(),
+    ),
+  );
   await tester.pumpAndSettle();
   return repo;
 }
@@ -63,11 +79,30 @@ Future<void> scrollAndTap(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
+/// Scrolls Home down to Recent transactions, which sit below the monthly
+/// overview, so the list is built and on screen before checking it.
+Future<void> showRecent(WidgetTester tester) async {
+  await scrollToTop(tester);
+  await tester.scrollUntilVisible(
+    find.text('Recent transactions'),
+    300,
+    scrollable: find.byType(Scrollable).hitTestable().first,
+  );
+  await tester.drag(
+    find.byType(Scrollable).hitTestable().first,
+    const Offset(0, -200),
+  );
+  await tester.pumpAndSettle();
+  expect(find.text('Recent transactions'), findsOneWidget);
+}
+
 /// Scrolls the open screen back to its top, e.g. to read validation errors
 /// on the first fields after tapping a button at the bottom of a long form
 /// (a lazily built list drops rows that are far off screen).
 Future<void> scrollToTop(WidgetTester tester) async {
   await tester.drag(
-      find.byType(Scrollable).hitTestable().first, const Offset(0, 3000));
+    find.byType(Scrollable).hitTestable().first,
+    const Offset(0, 3000),
+  );
   await tester.pumpAndSettle();
 }

@@ -219,6 +219,31 @@ class TransactionModel {
         simSlot: simSlot,
       );
 
+  /// A copy assigned to the user's account [accountId] (and SIM [simSlot]
+  /// when given). Nothing else changes: not the category, type, amount or
+  /// date, and an existing SIM is kept.
+  TransactionModel withAccount(String accountId, {int? simSlot}) =>
+      TransactionModel(
+        id: id,
+        description: description,
+        amount: amount,
+        type: type,
+        categoryId: categoryId,
+        date: date,
+        note: note,
+        source: source,
+        reference: reference,
+        smsText: smsText,
+        account: account,
+        toAccount: toAccount,
+        fee: fee,
+        interest: interest,
+        refundOf: refundOf,
+        accountId: accountId,
+        toAccountId: toAccountId,
+        simSlot: this.simSlot ?? simSlot,
+      );
+
   /// A copy with [id] replaced (used when a repository assigns one).
   TransactionModel withId(String id) => TransactionModel(
         id: id,

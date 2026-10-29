@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../accounts/money_account.dart';
+import '../categorization/category_registry.dart';
 import '../categorization/category_rule_repository.dart';
+import '../data/transaction_store.dart';
 import '../security/app_lock_gate.dart';
+import '../services/auth_service.dart';
+import '../services/avatar_store.dart';
+import '../services/photo_picker.dart';
+import '../widgets/user_avatar.dart';
 import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
 import '../sms/sms_gateway.dart';
@@ -9,7 +16,9 @@ import '../sms/sms_import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import 'app_lock_settings_screen.dart';
+import 'categories_screen.dart';
 import 'fuliza_import_screen.dart';
+import 'fuliza_report_screen.dart';
 import 'ziidi_fix_screen.dart';
 import 'learned_categories_screen.dart';
 
@@ -23,8 +32,14 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     required this.smsService,
     this.categoryRules,
+    this.categories,
     this.fulizaImporter,
     this.ziidiFixer,
+    this.transactions,
+    this.accounts = const [],
+    this.user,
+    this.avatar,
+    this.photoPicker,
   });
 
   final SmsImportService smsService;
@@ -32,11 +47,25 @@ class SettingsScreen extends StatefulWidget {
   /// Categories learned from corrections; null hides that section.
   final CategoryRuleStore? categoryRules;
 
+  /// The user's own categories; null hides "Categories".
+  final CategoryRegistry? categories;
+
   /// The Fuliza history import; null hides its entry.
   final FulizaImporter? fulizaImporter;
 
   /// Fix old Ziidi records; null hides its entry.
   final ZiidiFixer? ziidiFixer;
+
+  /// Saved transactions, for the Fuliza fee report; null hides its entry.
+  final TransactionStore? transactions;
+
+  /// The user's accounts, so the report can tell each Fuliza's SIM.
+  final List<MoneyAccount> accounts;
+
+  /// The signed-in user and their own photo; both needed for "Profile".
+  final AppUser? user;
+  final AvatarStore? avatar;
+  final PhotoPicker? photoPicker;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -46,6 +75,153 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
 
   SmsImportService get _sms => widget.smsService;
+
+  /// Automatic Fuliza import; null while loading. Off by default.
+  bool? _autoFuliza;
+
+  Future<void> _setAutoFuliza(bool on) async {
+    if (on) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Import Fuliza automatically?'),
+          content: const Text(
+              'From now on, each new Fuliza loan and repayment message is '
+              'saved as it arrives: a loan as money moved from that SIM\'s '
+              'Fuliza into its M-Pesa (its access fee counts as spending), a '
+              'repayment as money moved back. A message already saved is '
+              'never saved again, and one whose SIM or accounts are unknown '
+              'is held. Older messages are only brought in from Fuliza '
+              'history, after a preview.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Turn on'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    await _sms.setAutoFulizaImport(on);
+    if (mounted) setState(() => _autoFuliza = on);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _sms.autoFulizaImport().then((on) {
+      if (mounted) setState(() => _autoFuliza = on);
+    });
+    // Android may have closed the app while the photo picker was open
+    // (low memory): save the photo chosen then, if there was one.
+    if ((widget.avatar, widget.photoPicker) case (final a?, final p?)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final message = await a.recover(p);
+        if (message != null && mounted) _showMessage(message);
+      });
+    }
+  }
+
+  Future<void> _changePhoto(AvatarStore avatar, PhotoPicker picker) async {
+    final message = await avatar.change(picker);
+    if (message != null && mounted) _showMessage(message);
+  }
+
+  Future<void> _removePhoto(AvatarStore avatar) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove your photo?'),
+        content: const Text('Your Google photo or your initial will show '
+            'instead.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final message = await avatar.remove();
+    if (message != null && mounted) _showMessage(message);
+  }
+
+  Widget _profileCard(AppUser user, AvatarStore avatar, PhotoPicker picker) {
+    return ListenableBuilder(
+      listenable: avatar,
+      builder: (context, _) {
+        final name = user.displayName?.trim() ?? '';
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                UserAvatar(user: user, radius: 30, customImage: avatar.photo),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name.isNotEmpty ? name : user.email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (avatar.error != null)
+                        Text(
+                          'Couldn\'t load your photo. ${avatar.error!}',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                      Wrap(
+                        spacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: avatar.isBusy
+                                ? null
+                                : () => _changePhoto(avatar, picker),
+                            child: Text(avatar.photo == null
+                                ? 'Add photo'
+                                : 'Change photo'),
+                          ),
+                          if (avatar.photo != null)
+                            TextButton(
+                              onPressed: avatar.isBusy
+                                  ? null
+                                  : () => _removePhoto(avatar),
+                              child: const Text('Remove photo'),
+                            ),
+                          if (avatar.isBusy)
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   Future<void> _onToggle(bool turnOn) async {
     setState(() => _busy = true);
@@ -186,6 +362,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
+              if ((widget.user, widget.avatar, widget.photoPicker)
+                  case (final user?, final avatar?, final picker?)) ...[
+                _profileCard(user, avatar, picker),
+                const SizedBox(height: 12),
+              ],
               if (appLock != null) ...[
                 Card(
                   child: ListTile(
@@ -202,6 +383,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) =>
                             AppLockSettingsScreen(controller: appLock))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (widget.categories case final registry?) ...[
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.category_outlined,
+                        color: AppColors.primary),
+                    title: const Text('Categories'),
+                    subtitle: const Text('Add your own, rename or turn them '
+                        'off'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => CategoriesScreen(registry: registry),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -286,6 +485,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                         ),
+                      if (widget.fulizaImporter != null)
+                        SwitchListTile(
+                          secondary: const Icon(Icons.autorenew_rounded),
+                          title: const Text('Import Fuliza automatically'),
+                          subtitle: Text(_autoFuliza == true
+                              ? 'On: new Fuliza messages are saved as they '
+                                  'arrive.'
+                              : 'Off: new Fuliza messages wait until you '
+                                  'import them from Fuliza history.'),
+                          value: _autoFuliza ?? false,
+                          onChanged: _autoFuliza == null ? null : _setAutoFuliza,
+                        ),
                       if (widget.fulizaImporter case final importer?)
                         ListTile(
                           leading: const Icon(Icons.credit_score_rounded),
@@ -297,7 +508,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (_) =>
-                                  FulizaImportScreen(importer: importer),
+                                  FulizaImportScreen(
+                                importer: importer,
+                                accounts: () => widget.accounts,
+                                transactions: () =>
+                                    widget.transactions?.transactions ??
+                                    const [],
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (widget.transactions case final store?)
+                        ListTile(
+                          leading: const Icon(Icons.bar_chart_rounded),
+                          title: const Text('Fuliza fee report'),
+                          subtitle: const Text('Fees, loans, repayments and '
+                              'what is owed, per SIM.'),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => FulizaReportScreen(
+                                  store: store, accounts: widget.accounts),
                             ),
                           ),
                         ),

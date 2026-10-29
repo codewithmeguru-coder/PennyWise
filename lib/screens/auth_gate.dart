@@ -2,11 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../accounts/account_repository.dart';
 import '../accounts/anchor_log.dart';
+import '../categorization/category_registry.dart';
 import '../categorization/category_rule_repository.dart';
+import '../data/avatar_repository.dart';
 import '../data/budget_repository.dart';
+import '../data/category_budget_repository.dart';
+import '../data/category_repository.dart';
 import '../data/transaction_repository.dart';
 import '../data/transaction_store.dart';
 import '../services/auth_service.dart';
+import '../services/avatar_store.dart';
+import '../services/photo_picker.dart';
+import '../maintenance/sim_backfill.dart';
 import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
 import '../sms/sms_gateway.dart';
@@ -26,6 +33,10 @@ class AuthGate extends StatefulWidget {
     required this.authService,
     required this.repositoryForUser,
     required this.budgetRepositoryForUser,
+    required this.categoryBudgetsForUser,
+    required this.categoriesForUser,
+    required this.avatarForUser,
+    required this.photoPicker,
     required this.categoryRulesForUser,
     required this.accountsForUser,
     required this.smsGateway,
@@ -35,6 +46,10 @@ class AuthGate extends StatefulWidget {
   final AuthService authService;
   final TransactionRepository Function(String uid) repositoryForUser;
   final BudgetRepository Function(String uid) budgetRepositoryForUser;
+  final CategoryBudgetRepository Function(String uid) categoryBudgetsForUser;
+  final CategoryRepository Function(String uid) categoriesForUser;
+  final AvatarRepository Function(String uid) avatarForUser;
+  final PhotoPicker photoPicker;
   final CategoryRuleRepository Function(String uid) categoryRulesForUser;
   final AccountRepository Function(String uid) accountsForUser;
   final SmsGateway smsGateway;
@@ -70,6 +85,10 @@ class _AuthGateState extends State<AuthGate> {
           user: user,
           repository: widget.repositoryForUser(user.uid),
           budgetRepository: widget.budgetRepositoryForUser(user.uid),
+          categoryBudgets: widget.categoryBudgetsForUser(user.uid),
+          categories: widget.categoriesForUser(user.uid),
+          avatar: widget.avatarForUser(user.uid),
+          photoPicker: widget.photoPicker,
           categoryRules: widget.categoryRulesForUser(user.uid),
           accounts: widget.accountsForUser(user.uid),
           smsGateway: widget.smsGateway,
@@ -90,6 +109,10 @@ class _SignedInScope extends StatefulWidget {
     required this.user,
     required this.repository,
     required this.budgetRepository,
+    required this.categoryBudgets,
+    required this.categories,
+    required this.avatar,
+    required this.photoPicker,
     required this.categoryRules,
     required this.accounts,
     required this.smsGateway,
@@ -100,6 +123,10 @@ class _SignedInScope extends StatefulWidget {
   final AppUser user;
   final TransactionRepository repository;
   final BudgetRepository budgetRepository;
+  final CategoryBudgetRepository categoryBudgets;
+  final CategoryRepository categories;
+  final AvatarRepository avatar;
+  final PhotoPicker photoPicker;
   final CategoryRuleRepository categoryRules;
   final AccountRepository accounts;
   final SmsGateway smsGateway;
@@ -116,6 +143,13 @@ class _SignedInScopeState extends State<_SignedInScope>
   late final CategoryRuleStore _rules =
       CategoryRuleStore(widget.categoryRules);
   late final AccountStore _accounts = AccountStore(widget.accounts);
+
+  /// This user's own profile photo, while signed in.
+  late final AvatarStore _avatar = AvatarStore(widget.avatar);
+
+  /// This user's own categories, for every lookup while signed in.
+  late final CategoryRegistry _categories =
+      CategoryRegistry(widget.categories);
   late final SmsImportService _sms = SmsImportService(
     gateway: widget.smsGateway,
     settings: widget.smsSettings,
@@ -134,6 +168,14 @@ class _SignedInScopeState extends State<_SignedInScope>
     gateway: widget.smsGateway,
     accounts: () => _accounts,
   );
+  late final SimBackfill _simBackfill = SimBackfill(
+    repo: FirestoreSimBackfillRepository(uid: widget.user.uid),
+    store: SharedPrefsZiidiFixStore.prefixed(
+        'sim_backfill_${widget.user.uid}_'),
+    gateway: widget.smsGateway,
+    accounts: () => _accounts,
+    transactions: () => _store.transactions,
+  );
   late final FulizaImporter _fuliza = FulizaImporter(
     gateway: widget.smsGateway,
     settings: widget.smsSettings,
@@ -148,6 +190,7 @@ class _SignedInScopeState extends State<_SignedInScope>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _categories; // start loading the user's categories straight away
     _sms.start(); // does nothing unless the user turned detection on
   }
 
@@ -169,6 +212,8 @@ class _SignedInScopeState extends State<_SignedInScope>
     WidgetsBinding.instance.removeObserver(this);
     _sms.dispose();
     _rules.dispose();
+    _categories.dispose(); // clears them, so the next user never sees them
+    _avatar.dispose(); // the next user never sees this photo
     _accounts.dispose();
     _store.dispose();
     // The session ended (sign-out, or the account was disabled elsewhere).
@@ -188,11 +233,16 @@ class _SignedInScopeState extends State<_SignedInScope>
     return HomeShell(
       store: _store,
       budgetRepository: widget.budgetRepository,
+      categoryBudgets: widget.categoryBudgets,
+      categories: _categories,
+      avatar: _avatar,
+      photoPicker: widget.photoPicker,
       categoryRules: _rules,
       accounts: _accounts,
       smsService: _sms,
       fulizaImporter: _fuliza,
       ziidiFixer: _ziidi,
+      simBackfill: _simBackfill,
       anchorKeeper: _anchors,
       user: widget.user,
       onSignOut: widget.onSignOut,

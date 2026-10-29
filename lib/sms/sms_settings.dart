@@ -34,6 +34,12 @@ abstract class SmsSettings {
   /// profile, so Undo removes exactly those (see `FulizaImporter`).
   Future<List<String>> fulizaImportIds();
   Future<void> setFulizaImportIds(List<String> ids);
+
+  /// Whether Fuliza loans and repayments from new messages are saved
+  /// automatically. Off unless the user turns it on in Settings: installing
+  /// or opening the app never starts it.
+  Future<bool> autoFulizaImport();
+  Future<void> setAutoFulizaImport(bool on);
 }
 
 /// Why a transaction message was not imported.
@@ -105,6 +111,21 @@ class SharedPrefsSmsSettings implements SmsSettings {
   @override
   Future<void> setFulizaImportIds(List<String> ids) async =>
       (await _prefs).setStringList('${_prefix}fuliza_import', ids);
+
+  @override
+  Future<bool> autoFulizaImport() async {
+    // Only an explicit `true` saved by the switch turns it on; a missing or
+    // unreadable value is off.
+    try {
+      return (await _prefs).get('${_prefix}auto_fuliza') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> setAutoFulizaImport(bool on) async =>
+      (await _prefs).setBool('${_prefix}auto_fuliza', on);
 
   @override
   Future<Map<SkipReason, int>> skippedCounts() async {

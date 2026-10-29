@@ -98,6 +98,33 @@ class _ZiidiFixScreenState extends State<ZiidiFixScreen> {
     );
   }
 
+  /// A real Ziidi deposit or withdrawal the user edited after import is
+  /// fixed only on its own explicit confirmation.
+  Future<void> _fixEdited() async {
+    final p = _preview!;
+    final e = p.edited;
+    if (!await _confirm(
+        'Fix ${e.length} record${e.length == 1 ? '' : 's'} you edited?',
+        '${e.length == 1 ? 'This record is' : 'These records are'} a real '
+            'Ziidi ${e.length == 1 ? 'move' : 'moves'} by ${e.length == 1 ? 'its' : 'their'} '
+            'message, but ${e.length == 1 ? 'was' : 'were'} edited after import and '
+            '${e.length == 1 ? 'is' : 'are'} still saved as '
+            '${e.map((c) => c.record.type).toSet().join(' / ')}. '
+            'Fixing makes ${e.length == 1 ? 'it' : 'them'} savings, so '
+            'spending drops by ${Formatters.currency(e.where((c) => c.check.direction == ZiidiDirection.sent).fold(0.0, (s, c) => s + c.record.amount))}. '
+            'The amount, date and M-Pesa code don\'t change. A backup is '
+            'saved first, and Undo puts ${e.length == 1 ? 'it' : 'them'} back.',
+        'Fix')) {
+      return;
+    }
+    await _run(
+      () => widget.fixer.fixEdited(p),
+      (r) => r.error == null
+          ? 'Fixed ${r.done}${r.skipped > 0 ? ' (${r.skipped} changed since, left as they were)' : ''}.'
+          : 'Stopped after ${r.done}: ${r.error}',
+    );
+  }
+
   Future<void> _undo() async {
     if (!await _confirm(
         'Undo the Ziidi fix?',
@@ -148,6 +175,27 @@ class _ZiidiFixScreenState extends State<ZiidiFixScreen> {
                           _working || p.changes.isEmpty ? null : _fix,
                       child: Text('Back up and fix ${p.changes.length}'),
                     ),
+                    if (p.edited.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        '${p.edited.length} real Ziidi '
+                        '${p.edited.length == 1 ? 'record was' : 'records were'} '
+                        'edited by you after import, so the fix leaves '
+                        '${p.edited.length == 1 ? 'it' : 'them'} alone:',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      for (final c in p.edited)
+                        Text('${Formatters.shortDate(c.record.date)} · '
+                            '${Formatters.currency(c.record.amount)} · saved as '
+                            '${c.record.type} / ${c.record.category}'),
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: _working ? null : _fixEdited,
+                        child: Text(p.edited.length == 1
+                            ? 'Fix this one too…'
+                            : 'Fix these ${p.edited.length} too…'),
+                      ),
+                    ],
                     if (_changed.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       OutlinedButton(

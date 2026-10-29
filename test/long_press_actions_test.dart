@@ -49,8 +49,16 @@ class _RejectsDeletes extends FakeTransactionRepository {
 }
 
 Future<void> longPress(WidgetTester tester, String text) async {
-  await tester.scrollUntilVisible(find.text(text).first, 300,
-      scrollable: find.byType(Scrollable).hitTestable().first);
+  // Home's recent list sits below the monthly overview: scroll until the
+  // row is built and can be pressed.
+  for (var i = 0;
+      i < 20 && find.text(text).hitTestable().evaluate().isEmpty;
+      i++) {
+    await tester.drag(
+        find.byType(Scrollable).hitTestable().first, const Offset(0, -300));
+    await tester.pumpAndSettle();
+  }
+  await tester.ensureVisible(find.text(text).first);
   await tester.pumpAndSettle();
   await tester.longPress(find.text(text).first);
   await tester.pumpAndSettle();
@@ -119,7 +127,9 @@ void main() {
 
     expect(repo.items.map((t) => t.id), unorderedEquals(['b', 's']));
     expect(find.text('Deleted "Lunch"'), findsOneWidget);
+    await scrollToTop(tester);
     expect(find.text('KSh 3,800.00'), findsOneWidget);
+    await showRecent(tester);
     expect(find.text('Lunch'), findsNothing);
   });
 
@@ -191,6 +201,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.items, isEmpty);
+    await scrollToTop(tester);
     await tester.drag(find.byType(AccountCards), const Offset(2000, 0));
     await tester.pumpAndSettle();
     await cardShows('KSh 1,500.00');
@@ -246,6 +257,7 @@ void main() {
       final repo = await pumpApp(tester,
           repository: FakeTransactionRepository([lunch, books, salary]));
       await deleteLunch(tester);
+      await scrollToTop(tester);
       expect(find.text('KSh 3,800.00'), findsOneWidget);
 
       await tester.tap(find.text('Undo'));

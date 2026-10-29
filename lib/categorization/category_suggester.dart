@@ -1,3 +1,4 @@
+import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../sms/sms_transaction.dart';
 import 'builtin_rules.dart';
@@ -78,7 +79,11 @@ class CategorySuggester {
     // The user's own choice beats everything below, including the
     // "person" and "bank Paybill" review rules: they know what it was for.
     if (CategoryRule.keyFor(t) case final key?) {
-      if (rules[key] case final rule? when rule.type == type) {
+      // A rule for a category the user has turned off is skipped: it
+      // isn't offered for new transactions.
+      if (rules[key] case final rule?
+          when rule.type == type &&
+              !DefaultCategories.isInactive(rule.categoryId)) {
         return Suggestion(rule.categoryId, Confidence.high,
             'Your earlier choice for ${t.counterparty}');
       }

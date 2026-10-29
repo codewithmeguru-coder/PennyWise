@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../data/budget_repository.dart';
+import '../data/category_budget_repository.dart';
 import '../data/transaction_store.dart';
+import '../models/fuliza_link.dart';
+import '../models/month_selection.dart';
 import '../accounts/account_balances.dart';
 import '../accounts/account_repository.dart';
 import '../sms/sms_import_service.dart';
@@ -10,10 +14,12 @@ import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/balance_card.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/monthly_overview_card.dart';
 import '../widgets/section_header.dart';
 import '../widgets/transaction_tile.dart';
 
-/// Home tab: balance overview plus the most recent transactions.
+/// Home tab: balances, the monthly overview, and the most recent
+/// transactions.
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
     super.key,
@@ -28,6 +34,11 @@ class DashboardScreen extends StatelessWidget {
     this.accounts,
     this.onManageAccounts,
     this.onSetBalances,
+    this.budgetRepository,
+    this.categoryBudgets,
+    this.month,
+    this.onOpenBudgets,
+    this.onOpenTrends,
   });
 
   final TransactionStore store;
@@ -54,11 +65,36 @@ class DashboardScreen extends StatelessWidget {
   /// Opens "Set starting balances" (see [AccountCards.onSetBalances]).
   final VoidCallback? onSetBalances;
 
+  /// With [month], shows the monthly overview (budgets come from here).
+  final BudgetRepository? budgetRepository;
+
+  /// Category limits, for the overview's "over its limit" line.
+  final CategoryBudgetRepository? categoryBudgets;
+
+  /// The month the overview shows, shared with Budgets.
+  final MonthSelection? month;
+
+  /// Switches to the Budgets tab.
+  final VoidCallback? onOpenBudgets;
+
+  /// Opens month-by-month Trends.
+  final VoidCallback? onOpenTrends;
+
   /// Called when the user taps a transaction (opens the edit form).
   final ValueChanged<TransactionModel> onTransactionTap;
 
   /// Opens the Edit / Delete menu for a transaction.
   final ValueChanged<TransactionModel>? onTransactionLongPress;
+
+  static Widget _headerMonth(DateTime month) => Text(
+    Formatters.monthYear(month),
+    key: const Key('home-header-month'),
+    style: const TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      color: AppColors.textSecondary,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +102,7 @@ class DashboardScreen extends StatelessWidget {
       listenable: store,
       builder: (context, _) {
         final recent = store.recent();
+        final links = FulizaLinks(store.transactions);
 
         return CustomScrollView(
           slivers: [
@@ -83,14 +120,15 @@ class DashboardScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('PennyWise'),
-                  Text(
-                    Formatters.monthYear(DateTime.now()),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
+                  // The month the overview shows (shared with Budgets), so
+                  // the header never names a different one.
+                  if (month case final m?)
+                    ValueListenableBuilder<DateTime>(
+                      valueListenable: m,
+                      builder: (context, shown, _) => _headerMonth(shown),
+                    )
+                  else
+                    _headerMonth(DateTime.now()),
                 ],
               ),
               actions: [
@@ -168,8 +206,6 @@ class DashboardScreen extends StatelessWidget {
                       return BalanceCard(
                         balance: totals?.available ?? store.balance,
                         savings: totals?.savings ?? store.savingsBalance,
-                        monthIncome: store.monthIncome,
-                        monthExpenses: store.monthExpenses,
                         note: note,
                         noteLabel: totals == null
                             ? 'Not a balance'
@@ -179,6 +215,17 @@ class DashboardScreen extends StatelessWidget {
                       );
                     },
                   ),
+                  if (budgetRepository != null && month != null) ...[
+                    const SizedBox(height: 12),
+                    MonthlyOverviewCard(
+                      store: store,
+                      budgetRepository: budgetRepository!,
+                      categoryBudgets: categoryBudgets,
+                      month: month!,
+                      onOpenBudgets: onOpenBudgets,
+                      onOpenTrends: onOpenTrends,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   SectionHeader(
                     title: 'Recent transactions',
@@ -227,6 +274,7 @@ class DashboardScreen extends StatelessWidget {
                             const Divider(height: 1, indent: 72),
                           TransactionTile(
                             transaction: recent[i],
+                            paidWithFuliza: links.paidWithFuliza(recent[i]),
                             onTap: () => onTransactionTap(recent[i]),
                             onLongPress: onTransactionLongPress == null
                                 ? null

@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 
 import 'accounts/account_repository.dart';
 import 'categorization/category_rule_repository.dart';
+import 'data/avatar_repository.dart';
 import 'data/budget_repository.dart';
+import 'data/category_budget_repository.dart';
+import 'data/category_repository.dart';
 import 'data/transaction_repository.dart';
 import 'screens/auth_gate.dart';
 import 'security/app_lock_controller.dart';
 import 'security/app_lock_gate.dart';
 import 'services/auth_service.dart';
+import 'services/photo_picker.dart';
 import 'sms/sms_gateway.dart';
 import 'sms/sms_settings.dart';
 import 'theme/app_theme.dart';
@@ -19,6 +23,10 @@ class PennyWiseApp extends StatefulWidget {
     this.authService,
     this.repositoryForUser,
     this.budgetRepositoryForUser,
+    this.categoryBudgetsForUser,
+    this.categoriesForUser,
+    this.avatarForUser,
+    this.photoPicker,
     this.categoryRulesForUser,
     this.accountsForUser,
     this.smsGateway,
@@ -35,6 +43,21 @@ class PennyWiseApp extends StatefulWidget {
 
   /// Same, for budgets. Defaults to [FirestoreBudgetRepository].
   final BudgetRepository Function(String uid)? budgetRepositoryForUser;
+
+  /// Same, for per-category limits. Defaults to
+  /// [FirestoreCategoryBudgetRepository].
+  final CategoryBudgetRepository Function(String uid)? categoryBudgetsForUser;
+
+  /// Same, for the user's own categories. Defaults to
+  /// [FirestoreCategoryRepository].
+  final CategoryRepository Function(String uid)? categoriesForUser;
+
+  /// Same, for the user's own profile photo. Defaults to
+  /// [FirestoreAvatarRepository].
+  final AvatarRepository Function(String uid)? avatarForUser;
+
+  /// Chooses a profile photo. Defaults to [AndroidPhotoPicker].
+  final PhotoPicker? photoPicker;
 
   /// Same, for learned category rules. Defaults to
   /// [FirestoreCategoryRuleRepository].
@@ -101,6 +124,13 @@ class _PennyWiseAppState extends State<PennyWiseApp> {
             (uid) => FirestoreTransactionRepository(uid: uid),
         budgetRepositoryForUser: widget.budgetRepositoryForUser ??
             (uid) => FirestoreBudgetRepository(uid: uid),
+        categoryBudgetsForUser: widget.categoryBudgetsForUser ??
+            (uid) => FirestoreCategoryBudgetRepository(uid: uid),
+        categoriesForUser: widget.categoriesForUser ??
+            (uid) => FirestoreCategoryRepository(uid: uid),
+        avatarForUser: widget.avatarForUser ??
+            (uid) => FirestoreAvatarRepository(uid: uid),
+        photoPicker: widget.photoPicker ?? AndroidPhotoPicker(),
         categoryRulesForUser: widget.categoryRulesForUser ??
             (uid) => FirestoreCategoryRuleRepository(uid: uid),
         accountsForUser: widget.accountsForUser ??

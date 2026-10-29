@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../services/avatar_store.dart';
 import '../sms/sms_import_service.dart';
 import '../theme/app_theme.dart';
 import 'user_avatar.dart';
@@ -18,9 +19,13 @@ class AppDrawer extends StatelessWidget {
     required this.onSelectTab,
     required this.onOpenSettings,
     required this.onSignOut,
+    this.avatar,
   });
 
   final AppUser user;
+
+  /// The user's own photo, if they added one.
+  final AvatarStore? avatar;
 
   /// Index of the bottom-navigation tab that's showing (0 Home,
   /// 1 Transactions, 2 Budgets), so its item is highlighted.
@@ -46,7 +51,7 @@ class AppDrawer extends StatelessWidget {
       backgroundColor: AppColors.background,
       child: Column(
         children: [
-          _ProfileHeader(user: user),
+          _ProfileHeader(user: user, avatar: avatar),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -121,9 +126,10 @@ class AppDrawer extends StatelessWidget {
 /// Green header with the signed-in user's picture, name and email, in the
 /// same style as the dashboard's balance card.
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.user});
+  const _ProfileHeader({required this.user, this.avatar});
 
   final AppUser user;
+  final AvatarStore? avatar;
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +150,15 @@ class _ProfileHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              UserAvatar(user: user, radius: 30, onDark: true),
+              ListenableBuilder(
+                listenable: avatar ?? const _NoListenable(),
+                builder: (context, _) => UserAvatar(
+                  user: user,
+                  radius: 30,
+                  onDark: true,
+                  customImage: avatar?.photo,
+                ),
+              ),
               const SizedBox(height: 14),
               Text(
                 name.isNotEmpty ? name : 'PennyWise user',
@@ -241,4 +255,15 @@ class _StatusPill extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Stands in when there is no [AvatarStore] (nothing ever changes).
+class _NoListenable implements Listenable {
+  const _NoListenable();
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }

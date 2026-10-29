@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import 'auth_widgets.dart';
+import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 /// Email/password sign-in.
@@ -79,6 +80,22 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Opens "Reset password" with the email typed so far; keeps whatever
+  /// email was used there when coming back.
+  Future<void> _openForgotPassword() async {
+    final email = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => ForgotPasswordScreen(
+          authService: widget.authService,
+          initialEmail: _emailController.text,
+        ),
+      ),
+    );
+    if (email != null && email.isNotEmpty && mounted) {
+      _emailController.text = email;
+    }
+  }
+
   void _openRegister() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -137,7 +154,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     ? 'Enter your password'
                     : null,
               ),
-              const SizedBox(height: 28),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _busy ? null : _openForgotPassword,
+                  child: const Text('Forgot password?'),
+                ),
+              ),
+              const SizedBox(height: 12),
               AuthSubmitButton(
                 label: 'Sign in',
                 loading: _loading,

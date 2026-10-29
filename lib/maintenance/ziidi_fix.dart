@@ -7,7 +7,7 @@ import '../accounts/account_repository.dart';
 import '../accounts/money_account.dart';
 import '../data/data_exception.dart';
 import '../sms/sms_gateway.dart';
-import '../sms/sms_parser.dart';
+import 'inbox_sims.dart';
 import 'ziidi_matcher.dart';
 
 /// One stored transaction as the Ziidi fix sees it: the matcher's fields
@@ -122,7 +122,8 @@ class FirestoreZiidiFixRepository implements ZiidiFixRepository {
           .doc(_uid)
           .collection('transactions');
 
-  static ZiidiRecord? _record(DocumentSnapshot<Map<String, dynamic>> d) {
+  /// A stored transaction as these fixes read it; null if it's gone.
+  static ZiidiRecord? recordFrom(DocumentSnapshot<Map<String, dynamic>> d) {
     final data = d.data();
     if (data == null) return null;
     DateTime? time(String k) => (data[k] as Timestamp?)?.toDate();
@@ -154,7 +155,7 @@ class FirestoreZiidiFixRepository implements ZiidiFixRepository {
   Future<List<ZiidiRecord>> smsRecords() async {
     try {
       final snap = await _collection.where('source', isEqualTo: 'mpesa').get();
-      return [for (final d in snap.docs) ?_record(d)];
+      return [for (final d in snap.docs) ?recordFrom(d)];
     } catch (e) {
       throw DataException.from(e);
     }
@@ -166,7 +167,7 @@ class FirestoreZiidiFixRepository implements ZiidiFixRepository {
     final doc = _collection.doc(r.id);
     try {
       return await _collection.firestore.runTransaction((tx) async {
-        final now = _record(await tx.get(doc));
+        final now = recordFrom(await tx.get(doc));
         if (now == null ||
             now.marker != null ||
             now.type != r.type ||
@@ -199,7 +200,7 @@ class FirestoreZiidiFixRepository implements ZiidiFixRepository {
     final doc = _collection.doc(id);
     try {
       return await _collection.firestore.runTransaction((tx) async {
-        final now = _record(await tx.get(doc));
+        final now = recordFrom(await tx.get(doc));
         final marker = now?.marker;
         if (now == null || marker == null) return false;
         final check = ZiidiMatcher.check(ZiidiRecord(
@@ -239,6 +240,9 @@ class FirestoreZiidiFixRepository implements ZiidiFixRepository {
 class SharedPrefsZiidiFixStore implements ZiidiFixStore {
   SharedPrefsZiidiFixStore({required String uid}) : _prefix = 'ziidi_fix_${uid}_';
 
+  /// The same store kept under [prefix], for another fix of the same kind.
+  SharedPrefsZiidiFixStore.prefixed(this._prefix);
+
   final String _prefix;
 
   @override
@@ -272,9 +276,14 @@ class SharedPrefsZiidiFixStore implements ZiidiFixStore {
 
 /// The preview: what the fix would change, and what it leaves alone.
 class ZiidiPreview {
-  const ZiidiPreview(this.changes, this.skipped);
+  const ZiidiPreview(this.changes, this.skipped, {this.edited = const []});
 
   final List<ZiidiChange> changes;
+
+  /// Real Ziidi messages the user edited after import (e.g. still saved as
+  /// an expense). Not in [changes]: fixed only with [ZiidiFixer.fixEdited],
+  /// after the user confirms.
+  final List<ZiidiChange> edited;
 
   /// Ziidi messages it won't change, with why (already fixed, edited...).
   final Map<String, int> skipped;
@@ -324,28 +333,9 @@ class ZiidiFixer {
 
   bool get isBusy => _busy;
 
-  /// The SIM of each message code, from the phone's own records; a code
-  /// seen on both SIMs (or with no SIM) gives no answer.
-  Future<Map<String, int?>> _simsByCode(DateTime since) async {
-    final out = <String, int?>{};
-    try {
-      final inbox = await _gateway.readInbox(
-          senders: SmsParser.allSenders,
-          since: since.subtract(const Duration(days: 1)));
-      for (final m in inbox) {
-        final parsed =
-            SmsParser.parse(sender: m.sender, body: m.body, date: m.date);
-        if (parsed == null) continue;
-        final code = parsed.reference;
-        out[code] = out.containsKey(code) && out[code] != m.simSlot
-            ? null
-            : m.simSlot;
-      }
-    } catch (_) {
-      // No inbox access: no SIM evidence; SIMs stay unknown.
-    }
-    return out;
-  }
+  /// The SIM of each message code, from the phone's own records.
+  Future<Map<String, int?>> _simsByCode(DateTime since) =>
+      simsByCode(_gateway, since);
 
   Future<ZiidiPreview> preview() async {
     final records = await _repo.smsRecords();
@@ -355,6 +345,7 @@ class ZiidiFixer {
     // again. One changed by the user since (e.g. re-categorised) is not.
     final backedUp = {for (final b in await _store.backup()) b['id']: b};
     final candidates = <(ZiidiRecord, ZiidiCheck)>[];
+    final editedCandidates = <(ZiidiRecord, ZiidiCheck)>[];
     final skipped = <String, int>{};
     for (final r in records) {
       var check = ZiidiMatcher.check(r.stored);
@@ -372,18 +363,23 @@ class ZiidiFixer {
       }
       if (check.change) {
         candidates.add((r, check));
+      } else if (check.reason == 'Edited by you after import' &&
+          r.marker == null) {
+        // Still left alone by fix(), and counted as such; also offered on
+        // its own, fixed only if the user confirms it.
+        skipped[check.reason!] = (skipped[check.reason!] ?? 0) + 1;
+        editedCandidates.add((r, ZiidiCheck.change(check.direction!)));
       } else {
         skipped[check.reason!] = (skipped[check.reason!] ?? 0) + 1;
       }
     }
-    if (candidates.isEmpty) return ZiidiPreview(const [], skipped);
-    final earliest = candidates
-        .map((c) => c.$1.date)
-        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final all = [...candidates, ...editedCandidates];
+    if (all.isEmpty) return ZiidiPreview(const [], skipped);
+    final earliest =
+        all.map((c) => c.$1.date).reduce((a, b) => a.isBefore(b) ? a : b);
     final sims = await _simsByCode(earliest);
     final accounts = _accounts();
-    final changes = <ZiidiChange>[];
-    for (final (r, check) in candidates) {
+    ZiidiChange changeFor(ZiidiRecord r, ZiidiCheck check) {
       // Only a record that has no SIM yet gets one, and only from evidence.
       final slot = r.simSlot == null && r.accountId == null
           ? sims[r.reference]
@@ -391,16 +387,25 @@ class ZiidiFixer {
       final wallet = accounts?.forSim(slot, AccountKind.mobileMoney)?.id;
       final ziidi = accounts?.forSim(slot, AccountKind.savings)?.id;
       final both = wallet != null && ziidi != null;
-      changes.add(ZiidiChange(r, check,
+      return ZiidiChange(r, check,
           simSlot: slot,
           accountId: both ? wallet : null,
-          toAccountId: both ? ziidi : null));
+          toAccountId: both ? ziidi : null);
     }
-    changes.sort((a, b) => a.record.date.compareTo(b.record.date));
-    return ZiidiPreview(changes, skipped);
+
+    final changes = [for (final (r, c) in candidates) changeFor(r, c)]
+      ..sort((a, b) => a.record.date.compareTo(b.record.date));
+    final edited = [for (final (r, c) in editedCandidates) changeFor(r, c)]
+      ..sort((a, b) => a.record.date.compareTo(b.record.date));
+    return ZiidiPreview(changes, skipped, edited: edited);
   }
 
   Future<List<String>> changedIds() async => [...(await _store.changed()).keys];
+
+  /// Fixes the records the user edited after import, which the user has
+  /// confirmed: the same backup, per-record check and Undo as [fix].
+  Future<ZiidiRunResult> fixEdited(ZiidiPreview preview) =>
+      fix(ZiidiPreview(preview.edited, const {}));
 
   Future<ZiidiRunResult> fix(ZiidiPreview preview) async {
     if (_busy) return const ZiidiRunResult(error: 'Already running.');

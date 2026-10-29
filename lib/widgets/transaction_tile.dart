@@ -13,9 +13,14 @@ class TransactionTile extends StatelessWidget {
     required this.transaction,
     this.onTap,
     this.onLongPress,
+    this.paidWithFuliza = false,
   });
 
   final TransactionModel transaction;
+
+  /// The payment was completed with a Fuliza loan (see `FulizaLinks`):
+  /// says so, so it isn't mistaken for the loan itself.
+  final bool paidWithFuliza;
 
   /// Called when the row is tapped (opens the edit form).
   final VoidCallback? onTap;
@@ -78,6 +83,7 @@ class TransactionTile extends StatelessWidget {
           Formatters.relativeDate(t.date),
           // e.g. "M-Pesa", or "M-Pesa → Cash" for a cash withdrawal.
           ?accounts,
+          if (paidWithFuliza) 'Paid with Fuliza loan',
         ].join(' · '),
         style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
       ),

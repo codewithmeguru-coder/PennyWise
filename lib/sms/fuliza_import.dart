@@ -48,9 +48,22 @@ class FulizaSimTotals {
 
 /// The result of reading the inbox, before anything is written.
 class FulizaPreview {
-  const FulizaPreview(this.items);
+  const FulizaPreview(this.items, {this.paymentsSaved = const {}});
 
   final List<FulizaItem> items;
+
+  /// Keys of loans whose funded payment (same code, `mpesa_<code>`) is
+  /// already saved: importing the loan adds the borrowing and its fee, and
+  /// never a second payment.
+  final Set<String> paymentsSaved;
+
+  /// The records an import would create, under the ids they'd be saved as.
+  List<TransactionModel> get toCreate =>
+      [for (final i in eligible) i.transaction.withId(i.key)];
+
+  /// Eligible loans whose payment is already saved.
+  int get withPaymentSaved =>
+      eligible.where((i) => i.isDraw && paymentsSaved.contains(i.key)).length;
 
   List<FulizaItem> get eligible =>
       [for (final i in items) if (i.status == FulizaStatus.eligible) i];
@@ -151,7 +164,13 @@ class FulizaImporter {
                   : FulizaStatus.eligible;
       items.add(FulizaItem(parsed, t, status));
     }
-    return FulizaPreview(items);
+    return FulizaPreview(items, paymentsSaved: {
+      for (final i in items)
+        if (i.isDraw &&
+            existing.contains(
+                i.key.substring(0, i.key.length - '_FULIZA'.length)))
+          i.key,
+    });
   }
 
   Future<FulizaRunResult> importEligible(FulizaPreview preview) async {
