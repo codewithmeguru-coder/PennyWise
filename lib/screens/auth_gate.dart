@@ -13,6 +13,7 @@ import '../data/transaction_store.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_store.dart';
 import '../services/photo_picker.dart';
+import '../maintenance/internal_transfer_fix.dart';
 import '../maintenance/sim_backfill.dart';
 import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
@@ -176,6 +177,13 @@ class _SignedInScopeState extends State<_SignedInScope>
     accounts: () => _accounts,
     transactions: () => _store.transactions,
   );
+  late final MoveFix _moveFix = MoveFix(
+    repository: FirestoreMoveFixRepository(uid: widget.user.uid),
+    store: SharedPrefsMoveFixStore(uid: widget.user.uid),
+    gateway: widget.smsGateway,
+    accounts: () => _accounts,
+    transactions: () => _store.transactions,
+  );
   late final FulizaImporter _fuliza = FulizaImporter(
     gateway: widget.smsGateway,
     settings: widget.smsSettings,
@@ -242,6 +250,7 @@ class _SignedInScopeState extends State<_SignedInScope>
       smsService: _sms,
       fulizaImporter: _fuliza,
       ziidiFixer: _ziidi,
+      moveFix: _moveFix,
       simBackfill: _simBackfill,
       anchorKeeper: _anchors,
       user: widget.user,

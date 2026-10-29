@@ -20,6 +20,7 @@ import '../models/transaction_model.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_store.dart';
 import '../services/photo_picker.dart';
+import '../maintenance/internal_transfer_fix.dart';
 import '../maintenance/sim_backfill.dart';
 import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
@@ -52,6 +53,7 @@ class HomeShell extends StatefulWidget {
     required this.smsService,
     this.fulizaImporter,
     this.ziidiFixer,
+    this.moveFix,
     this.simBackfill,
     this.anchorKeeper,
     required this.user,
@@ -90,6 +92,9 @@ class HomeShell extends StatefulWidget {
 
   /// Settings › Fix old Ziidi records (see [ZiidiFixer]).
   final ZiidiFixer? ziidiFixer;
+
+  /// Settings › Fix moves between your SIMs (see [MoveFix]).
+  final MoveFix? moveFix;
 
   /// Needs review › Account › "Fill in SIMs from your messages".
   final SimBackfill? simBackfill;
@@ -225,6 +230,7 @@ class _HomeShellState extends State<HomeShell> {
         categories: widget.categories,
         fulizaImporter: widget.fulizaImporter,
         ziidiFixer: widget.ziidiFixer,
+        moveFix: widget.moveFix,
         transactions: widget.store,
         accounts: widget.accounts.all,
         user: widget.user,

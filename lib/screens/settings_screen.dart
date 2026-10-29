@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/avatar_store.dart';
 import '../services/photo_picker.dart';
 import '../widgets/user_avatar.dart';
+import '../maintenance/internal_transfer_fix.dart';
 import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
 import '../sms/sms_gateway.dart';
@@ -19,6 +20,7 @@ import 'app_lock_settings_screen.dart';
 import 'categories_screen.dart';
 import 'fuliza_import_screen.dart';
 import 'fuliza_report_screen.dart';
+import 'move_fix_screen.dart';
 import 'ziidi_fix_screen.dart';
 import 'learned_categories_screen.dart';
 
@@ -35,6 +37,7 @@ class SettingsScreen extends StatefulWidget {
     this.categories,
     this.fulizaImporter,
     this.ziidiFixer,
+    this.moveFix,
     this.transactions,
     this.accounts = const [],
     this.user,
@@ -55,6 +58,9 @@ class SettingsScreen extends StatefulWidget {
 
   /// Fix old Ziidi records; null hides its entry.
   final ZiidiFixer? ziidiFixer;
+
+  /// Fix moves between the user's SIMs; null hides its entry.
+  final MoveFix? moveFix;
 
   /// Saved transactions, for the Fuliza fee report; null hides its entry.
   final TransactionStore? transactions;
@@ -482,6 +488,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (_) => ZiidiFixScreen(fixer: fixer),
+                            ),
+                          ),
+                        ),
+                      if (widget.moveFix case final fix?)
+                        ListTile(
+                          leading: const Icon(Icons.swap_horiz_rounded),
+                          title: const Text('Fix moves between your SIMs'),
+                          subtitle: const Text('See which records are money '
+                              'moved between your own SIMs or withdrawn as '
+                              'cash, then choose whether to fix them.'),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => MoveFixScreen(fix: fix),
                             ),
                           ),
                         ),
