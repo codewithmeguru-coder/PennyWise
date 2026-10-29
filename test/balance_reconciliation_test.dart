@@ -238,6 +238,143 @@ void main() {
     });
   });
 
+  group('a Fuliza loan already in the newest SMS balance', () {
+    // A saved SMS record with its real key ("mpesa_<code>", or
+    // "mpesa_<code>_FULIZA" for the loan that funded that payment).
+    TransactionModel smsTx(
+      String id,
+      TransactionType type,
+      double amount, {
+      required DateTime date,
+      String? from,
+      String? to,
+      double? fee,
+      int? sim,
+      String? sms,
+      Account? account,
+      Account? toAccount,
+      String? reference,
+    }) =>
+        TransactionModel(
+          id: id,
+          description: 'x',
+          amount: amount,
+          type: type,
+          categoryId: 'food',
+          date: date,
+          accountId: from,
+          toAccountId: to,
+          fee: fee,
+          simSlot: sim,
+          smsText: sms,
+          source: TransactionSource.mpesa,
+          reference: reference ??
+              id.replaceFirst('mpesa_', '').replaceFirst('_FULIZA', ''),
+          account: account,
+          toAccount: toAccount,
+        );
+
+    // The reported case: a 90.00 payment on SIM 2 says "balance 0.00"; the
+    // 59.44 Fuliza loan that funded it arrives 9.7 seconds later.
+    final payment = smsTx('mpesa_UJR0000001', TransactionType.expense, 90,
+        date: at(0), sim: 1, sms: balanceSms(0), account: Account.mpesa);
+    final loan = smsTx(
+      'mpesa_UJR0000001_FULIZA',
+      TransactionType.transfer,
+      59.44,
+      date: at(0).add(const Duration(milliseconds: 9700)),
+      from: 'fuliza-sim2',
+      to: 'mpesa-sim2',
+      fee: 0.6,
+      sim: 1,
+      toAccount: Account.mpesa,
+    );
+
+    test('the loan that funded the payment is not added on top of its '
+        'stated balance', () {
+      final b = bal(account('mpesa-sim2'), [payment, loan]);
+      expect(b.status, BalanceStatus.fromSms);
+      expect(b.reported, 0);
+      expect(b.afterReport, 0);
+      expect(b.shown, 0); // was 59.44 before the fix
+    });
+
+    test('with a starting balance, the SMS agrees (no false mismatch)', () {
+      // 30.56 held, then 90 paid with 59.44 borrowed: 0.00, as the SMS says.
+      final wallet = account('mpesa-sim2', opening: 30.56, since: at(-60));
+      final b = bal(wallet, [payment, loan]);
+      expect(b.calculatedAtReport, 0);
+      expect(b.status, BalanceStatus.verified);
+      expect(b.shown, 0);
+    });
+
+    test('the loan still counts in full on the Fuliza card and its fee as '
+        'spending', () {
+      final fuliza = account('fuliza-sim2', opening: -100, since: at(-60));
+      expect(bal(fuliza, [payment, loan]).owed, 160.04);
+      expect(Ledger.of([payment, loan]).spending, 90.6);
+    });
+
+    test('a loan for a later payment, after the newest SMS, still counts', () {
+      final got = smsTx('mpesa_UJR0000002', TransactionType.income, 500,
+          date: at(10), sim: 1, sms: balanceSms(500), account: Account.mpesa);
+      // Its own payment's SMS (code 3) isn't saved, so nothing states the
+      // balance after this loan: it is added.
+      final later = smsTx('mpesa_UJR0000003_FULIZA', TransactionType.transfer,
+          20,
+          date: at(20),
+          from: 'fuliza-sim2',
+          to: 'mpesa-sim2',
+          fee: 0.2,
+          sim: 1,
+          toAccount: Account.mpesa);
+      final b = bal(account('mpesa-sim2'), [payment, loan, got, later]);
+      expect(b.reported, 500);
+      expect(b.afterReport, 20);
+      expect(b.shown, 520);
+    });
+
+    test('a repayment after the newest SMS still counts', () {
+      final repay = smsTx('mpesa_UJR0000001', TransactionType.debtRepayment,
+          30,
+          date: at(5),
+          from: 'mpesa-sim2',
+          to: 'fuliza-sim2',
+          sim: 1,
+          account: Account.mpesa);
+      final got = smsTx('mpesa_UJR0000004', TransactionType.income, 500,
+          date: at(1), sim: 1, sms: balanceSms(500), account: Account.mpesa);
+      final b = bal(account('mpesa-sim2'), [got, repay]);
+      expect(b.reported, 500);
+      expect(b.shown, 470);
+    });
+
+    test('only the loan with that payment\'s own key: another record with '
+        'the same code is still added after the SMS', () {
+      final other = smsTx('mpesa_UJR0000001_COPY', TransactionType.transfer,
+          59.44,
+          date: at(1),
+          from: 'fuliza-sim2',
+          to: 'mpesa-sim2',
+          sim: 1,
+          toAccount: Account.mpesa,
+          reference: 'UJR0000001'); // same code, not the loan's own key
+      final b = bal(account('mpesa-sim2'), [payment, other]);
+      expect(b.shown, 59.44);
+    });
+
+    test('another SIM\'s balance SMS changes nothing here', () {
+      final sim1Sms = smsTx('mpesa_UJR0000005', TransactionType.expense, 10,
+          date: at(30), sim: 0, sms: balanceSms(100), account: Account.mpesa);
+      final b2 = bal(account('mpesa-sim2'), [payment, loan, sim1Sms]);
+      expect(b2.reported, 0);
+      expect(b2.shown, 0);
+      final b1 = bal(account('mpesa-sim1'), [payment, loan, sim1Sms]);
+      expect(b1.reported, 100);
+      expect(b1.shown, 100);
+    });
+  });
+
   group('assessment (read-only)', () {
     test('finds what makes balances unreliable, for any user', () {
       final accounts = [

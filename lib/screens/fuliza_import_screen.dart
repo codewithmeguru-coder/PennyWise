@@ -160,9 +160,20 @@ class _FulizaImportScreenState extends State<FulizaImportScreen> {
     final fees = p.bySim.values.fold(0.0, (s, t) => s + t.fees);
     final accounts = widget.accounts?.call();
     final all = widget.transactions?.call();
-    final cards = accounts == null || all == null
+    // Past totals per account (the history these records join), and the
+    // change to the balance each card actually shows: they differ when a
+    // card shows its newest SMS balance or starts after these records.
+    final history = accounts == null || all == null
         ? null
         : AccountAssignment.impact(accounts, all, p.toCreate);
+    final cards = accounts == null || all == null
+        ? null
+        : AccountAssignment.cardChange(accounts, all, p.toCreate);
+    String amounts(Map<MoneyAccount, double> m) => [
+          for (final e in m.entries)
+            '${e.key.name} ${e.value > 0 ? '+' : ''}'
+                '${Formatters.currency(e.value)}',
+        ].join(' · ');
     return [
       const SizedBox(height: 12),
       const Text('If you import:',
@@ -172,15 +183,22 @@ class _FulizaImportScreenState extends State<FulizaImportScreen> {
           'spending or income.'),
       Text('${p.withPaymentSaved} of the loans\' payments are already saved: '
           'only the loan and its fee are added, never a second payment.'),
+      if (history != null)
+        Text(
+          history.isEmpty
+              ? 'Past totals per account: no change (all are before the '
+                  'starting balances).'
+              : 'Past totals per account (not a balance change): '
+                  '${amounts(history)}',
+          key: const Key('fuliza-history-impact'),
+        ),
       if (cards != null)
-        Text(cards.isEmpty
-            ? 'No account card changes (all are before the starting '
-                'balances).'
-            : 'Account cards change by: ${[
-                for (final e in cards.entries)
-                  '${e.key.name} ${e.value > 0 ? '+' : ''}'
-                      '${Formatters.currency(e.value)}',
-              ].join(' · ')}'),
+        Text(
+          cards.isEmpty
+              ? 'Your account card balances: no change.'
+              : 'Your account card balances change by: ${amounts(cards)}',
+          key: const Key('fuliza-card-impact'),
+        ),
     ];
   }
 

@@ -17,6 +17,66 @@ TransactionModel tx(
     );
 
 void main() {
+  test('a month with a Fuliza-funded payment, its loan and repayment, a '
+      'refund, savings and a move between own SIMs counts each once', () {
+    final d = DateTime(2026, 10, 15, 9);
+    TransactionModel t(String id, TransactionType type, double amount,
+            {double? fee, String? from, String? to, Account? account,
+            Account? toAccount, String category = 'food'}) =>
+        TransactionModel(
+          id: id,
+          description: id,
+          amount: amount,
+          type: type,
+          categoryId: category,
+          date: d,
+          fee: fee,
+          accountId: from,
+          toAccountId: to,
+          account: account,
+          toAccount: toAccount,
+        );
+    final txs = [
+      t('mpesa_P1', TransactionType.expense, 100,
+          from: 'mpesa-sim1', account: Account.mpesa),
+      // The Fuliza loan that paid for it: a transfer; only its fee spends.
+      t('mpesa_P1_FULIZA', TransactionType.transfer, 60,
+          fee: 0.6, from: 'fuliza-sim1', to: 'mpesa-sim1',
+          toAccount: Account.mpesa, category: 'transfer'),
+      t('mpesa_R1', TransactionType.debtRepayment, 60.6,
+          from: 'mpesa-sim1', to: 'fuliza-sim1', account: Account.mpesa,
+          category: 'debt_repayment'),
+      t('mpesa_F1', TransactionType.refund, 20,
+          from: 'mpesa-sim1', account: Account.mpesa),
+      t('mpesa_Z1', TransactionType.savingsContribution, 50,
+          from: 'mpesa-sim1', to: 'ziidi-sim1', account: Account.mpesa,
+          category: 'savings'),
+      t('mpesa_S1', TransactionType.transfer, 500,
+          fee: 7, from: 'mpesa-sim2', to: 'mpesa-sim1',
+          account: Account.mpesa, category: 'transfer'),
+    ];
+    final s = MonthlySummary.calculate(
+        transactions: txs, month: DateTime(2026, 10), budget: 1000);
+    // 100 paid - 20 refunded + 0.60 + 7 in fees; loan, repayment, savings
+    // and the move between SIMs are not spending or income.
+    expect(s.expenses, 87.6);
+    expect(s.income, 0);
+    expect(s.remaining, 912.4);
+    expect({for (final c in s.byCategory) c.categoryId: c.amount},
+        {'food': 80, 'fees': 7.6});
+    expect(s.netSaved, 50);
+  });
+
+  test('an empty month is all zeros, with no categories and no budget '
+      'status', () {
+    final s = MonthlySummary.calculate(
+        transactions: const [], month: DateTime(2026, 11));
+    expect([s.income, s.expenses, s.net], [0, 0, 0]);
+    expect(s.byCategory, isEmpty);
+    expect(s.hasBudget, isFalse);
+    expect(s.status, isNull);
+  });
+
   final september = DateTime(2026, 9);
 
   test('only counts transactions inside the selected month', () {

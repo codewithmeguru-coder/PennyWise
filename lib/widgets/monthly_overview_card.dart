@@ -332,9 +332,11 @@ class _BudgetLine extends StatelessWidget {
       children: [
         Text(
           remaining < 0
-              ? '${Formatters.currency(-remaining)} over budget'
+              ? '${Formatters.currency(-remaining)} over budget · '
+                    '$percentUsed% used'
               : '${Formatters.currency(remaining)} left of '
-                    '${Formatters.currency(summary.budget!)}',
+                    '${Formatters.currency(summary.budget!)} · '
+                    '$percentUsed% used',
           style: const TextStyle(
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,

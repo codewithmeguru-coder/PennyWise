@@ -451,5 +451,46 @@ void main() {
       expect(s.repo.items, isEmpty);
       expect(find.text('Undo Fuliza import (2)'), findsNothing);
     });
+
+    testWidgets('says what the figures are: past totals per account, and the '
+        'card balances, which a loan already in its payment\'s SMS balance '
+        'does not move', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.8125;
+      addTearDown(tester.view.reset);
+      final s = (await tester.runAsync(() async {
+        final accounts = await starterAccounts();
+        // The payment the loan funded, saved earlier; its SMS says the
+        // M-Pesa balance is 0.00. The loan's SMS arrives a minute later.
+        final paid = convert(payment('UJMAB1CDE1', '50.00'), 0, accounts)
+            .withId('mpesa_UJMAB1CDE1');
+        return setup([
+          sms(draw('UJMAB1CDE1', '50.00', '0.50'), slot: 0, minutes: 1),
+        ], existing: [paid]);
+      }))!;
+      final accounts = MoneyAccount.starterSet();
+      await tester.pumpWidget(MaterialApp(
+        home: FulizaImportScreen(
+          importer: s.importer,
+          accounts: () => accounts,
+          transactions: () => s.store.transactions,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('Ready to import: 1'), findsOneWidget);
+      expect(find.textContaining('Account cards change by'), findsNothing);
+      final history = tester
+          .widget<Text>(find.byKey(const Key('fuliza-history-impact')))
+          .data!;
+      expect(history, startsWith('Past totals per account (not a balance '
+          'change): '));
+      expect(history, contains('+KSh 50.00'));
+      expect(
+        tester.widget<Text>(find.byKey(const Key('fuliza-card-impact'))).data,
+        // Only the loan account moves; SIM 1 M-Pesa stays at its SMS 0.00.
+        'Your account card balances change by: Fuliza (SIM 1) -KSh 50.50',
+      );
+      expect(s.repo.writes, isEmpty);
+    });
   });
 }

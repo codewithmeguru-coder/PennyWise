@@ -72,9 +72,11 @@ class _LimitRow extends StatelessWidget {
     if (row.hasLimit) {
       final limit = Formatters.currency(row.limit!);
       final remaining = row.remaining!;
+      final used = '${(row.usedFraction! * 100).round()}% used';
       limitText = status == BudgetStatus.over
-          ? '${Formatters.currency(-remaining)} over the $limit limit'
-          : '${Formatters.currency(remaining)} left of $limit'
+          ? 'Over budget: ${Formatters.currency(-remaining)} over the $limit '
+                'limit · $used'
+          : '${Formatters.currency(remaining)} left of $limit · $used'
                 '${status == BudgetStatus.nearLimit ? ' · near limit' : ''}';
     } else {
       limitText = null;

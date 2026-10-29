@@ -12,6 +12,7 @@ import 'package:pennywise/widgets/balance_card.dart';
 import 'package:pennywise/widgets/charts/category_donut.dart';
 import 'package:pennywise/widgets/monthly_overview_card.dart';
 
+import 'fake_auth_service.dart';
 import 'fake_budget_repository.dart';
 import 'fake_transaction_repository.dart';
 import 'test_app.dart';
@@ -334,7 +335,7 @@ void main() {
       expect(inOverview(find.text('KSh 291.00')), findsOneWidget);
       expect(inOverview(find.text('+KSh 4,709.00')), findsOneWidget);
       expect(
-        inOverview(find.text('KSh 709.00 left of KSh 1,000.00')),
+        inOverview(find.text('KSh 709.00 left of KSh 1,000.00 · 29% used')),
         findsOneWidget,
       );
       expect(inOverview(find.byType(CategoryDonut)), findsOneWidget);
@@ -455,6 +456,43 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets('switching profile shows the new profile\'s figures, '
+        'never the previous one\'s', (tester) async {
+      // The login screen is shown at the test's default size (its test
+      // font is wider than a phone's); the overview at phone size.
+      final auth = FakeAuthService();
+      final byUser = {
+        'u-a@example.com': FakeTransactionRepository([
+          tx(TransactionType.expense, 300, DateTime(thisMonth.year,
+              thisMonth.month, 1, 9)),
+        ]),
+        'u-b@example.com': FakeTransactionRepository([
+          tx(TransactionType.expense, 45, DateTime(thisMonth.year,
+              thisMonth.month, 1, 9)),
+        ]),
+      };
+      await pumpApp(tester, auth: auth, repositoryForUser: (u) => byUser[u]!);
+      await auth.signIn(email: 'a@example.com', password: 'x');
+      await tester.pumpAndSettle();
+      phone(tester);
+      await tester.pumpAndSettle();
+      await showOverview(tester);
+      expect(inOverview(find.text('KSh 300.00')), findsWidgets);
+
+      tester.view.reset();
+      await auth.signOut();
+      await tester.pumpAndSettle();
+      await auth.signIn(email: 'b@example.com', password: 'x');
+      await tester.pumpAndSettle();
+      phone(tester);
+      await tester.pumpAndSettle();
+      await showOverview(tester);
+      expect(inOverview(find.text('KSh 45.00')), findsWidgets);
+      expect(inOverview(find.text('KSh 300.00')), findsNothing);
+      // A new profile starts on the current month.
+      expect(headerMonth(tester), Formatters.monthYear(thisMonth));
     });
 
     testWidgets('a load error in the overview offers Retry', (tester) async {

@@ -20,6 +20,7 @@ import 'fake_transaction_repository.dart';
 Future<FakeTransactionRepository> pumpApp(
   WidgetTester tester, {
   FakeTransactionRepository? repository,
+  FakeTransactionRepository Function(String uid)? repositoryForUser,
   FakeBudgetRepository? budgets,
   FakeCategoryBudgetRepository? categoryBudgets,
   FakeCategoryRepository? categories,
@@ -39,7 +40,7 @@ Future<FakeTransactionRepository> pumpApp(
     PennyWiseApp(
       authService:
           auth ?? FakeAuthService(signedInAs: FakeAuthService.testUser),
-      repositoryForUser: (_) => repo,
+      repositoryForUser: repositoryForUser ?? (_) => repo,
       budgetRepositoryForUser: (_) => budgetRepo,
       categoryBudgetsForUser: (_) =>
           categoryBudgets ?? FakeCategoryBudgetRepository(),

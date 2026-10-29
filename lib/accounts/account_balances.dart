@@ -1,3 +1,4 @@
+import '../models/fuliza_link.dart';
 import '../models/ledger.dart';
 import '../models/transaction_model.dart';
 import 'money_account.dart';
@@ -171,9 +172,17 @@ class AccountBalance {
         reported = statedBalance(evidence.smsText);
         reportedAt = evidence.date;
         var upTo = Ledger.toCents(a.openingBalance ?? 0);
+        // The Fuliza loan that funded this very payment (same code, saved
+        // as "<payment id>_FULIZA") is already in the balance its SMS
+        // states, even when the loan SMS arrives a few seconds later.
+        final fundedBy = '${evidence.id}${FulizaLinks.loanSuffix}';
         for (final t in txs) {
           if (!counts(t)) continue;
-          if (t.date.isAfter(evidence.date)) {
+          final included = t.id == fundedBy &&
+              t.type == TransactionType.transfer &&
+              t.reference != null &&
+              t.reference == evidence.reference;
+          if (t.date.isAfter(evidence.date) && !included) {
             after += _delta(a, t);
           } else {
             upTo += _delta(a, t);

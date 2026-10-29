@@ -305,7 +305,7 @@ void main() {
       await enterLimit(tester, '1000');
       expect(limits.limitFor(thisMonth, 'food'), 1000);
       expect(
-        inBudgets(find.text('KSh 400.00 left of KSh 1,000.00')),
+        inBudgets(find.text('KSh 400.00 left of KSh 1,000.00 · 60% used')),
         findsOneWidget,
       );
 
@@ -314,7 +314,7 @@ void main() {
       await enterLimit(tester, '500');
       expect(limits.limitFor(thisMonth, 'food'), 500);
       expect(
-        inBudgets(find.text('KSh 100.00 over the KSh 500.00 limit')),
+        inBudgets(find.text('Over budget: KSh 100.00 over the KSh 500.00 limit · 120% used')),
         findsOneWidget,
       );
 
@@ -367,7 +367,7 @@ void main() {
       expect(limits.limitFor(thisMonth, 'health'), 2000);
       expect(inBudgets(find.text('Healthcare')), findsOneWidget);
       expect(
-        inBudgets(find.text('KSh 2,000.00 left of KSh 2,000.00')),
+        inBudgets(find.text('KSh 2,000.00 left of KSh 2,000.00 · 0% used')),
         findsOneWidget,
       );
     });
@@ -389,7 +389,7 @@ void main() {
       );
       await openBudgets(tester);
       expect(
-        inBudgets(find.text('KSh 100.00 over the KSh 300.00 limit')),
+        inBudgets(find.text('Over budget: KSh 100.00 over the KSh 300.00 limit · 133% used')),
         findsOneWidget,
       );
       final transportY = tester
@@ -538,7 +538,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        inBudgets(find.text('KSh 100.00 over the KSh 500.00 limit')),
+        inBudgets(find.text('Over budget: KSh 100.00 over the KSh 500.00 limit · 120% used')),
         findsOneWidget,
       );
     });
