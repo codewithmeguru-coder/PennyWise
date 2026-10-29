@@ -222,7 +222,8 @@ class TransactionModel {
   /// A copy assigned to the user's account [accountId] (and SIM [simSlot]
   /// when given). Nothing else changes: not the category, type, amount or
   /// date, and an existing SIM is kept.
-  TransactionModel withAccount(String accountId, {int? simSlot}) =>
+  TransactionModel withAccount(String accountId,
+          {int? simSlot, String? toAccountId}) =>
       TransactionModel(
         id: id,
         description: description,
@@ -240,7 +241,7 @@ class TransactionModel {
         interest: interest,
         refundOf: refundOf,
         accountId: accountId,
-        toAccountId: toAccountId,
+        toAccountId: toAccountId ?? this.toAccountId,
         simSlot: this.simSlot ?? simSlot,
       );
 

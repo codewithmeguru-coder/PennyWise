@@ -228,7 +228,7 @@ void main() {
           'Ksh3,200.00. Transaction cost, Ksh23.00.')!;
       final model = SmsImportService.toTransaction(t);
 
-      expect(model.description, 'John Doe');
+      expect(model.description, 'Sent to John Doe');
       expect(model.amount, 1500);
       expect(model.source, TransactionSource.mpesa);
       expect(model.reference, 'TJ6AB1CD2F');

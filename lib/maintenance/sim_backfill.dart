@@ -28,6 +28,7 @@ class BackfillChange {
     this.accountId,
     this.evidence, {
     this.accountName,
+    this.toAccountId,
   });
 
   final ZiidiRecord record;
@@ -36,6 +37,10 @@ class BackfillChange {
   final String? accountName;
   final int simSlot;
   final String accountId;
+
+  /// The other side of a move between the user's own accounts (savings,
+  /// a loan repayment, a Fuliza loan); null for income and spending.
+  final String? toAccountId;
   final SimEvidence evidence;
 
   /// The record had no SIM, so the backfill sets it too.
@@ -110,6 +115,7 @@ abstract class SimBackfillRepository {
   Future<bool> undo(
     String id, {
     required String accountId,
+    String? toAccountId,
     required bool removeSim,
     required String type,
     required String category,
@@ -158,6 +164,7 @@ class FirestoreSimBackfillRepository implements SimBackfillRepository {
         }
         tx.update(doc, {
           'accountId': change.accountId,
+          if (change.toAccountId != null) 'toAccountId': change.toAccountId,
           if (change.setsSim) 'simSlot': change.simSlot,
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -172,6 +179,7 @@ class FirestoreSimBackfillRepository implements SimBackfillRepository {
   Future<bool> undo(
     String id, {
     required String accountId,
+    String? toAccountId,
     required bool removeSim,
     required String type,
     required String category,
@@ -182,12 +190,14 @@ class FirestoreSimBackfillRepository implements SimBackfillRepository {
         final now = FirestoreZiidiFixRepository.recordFrom(await tx.get(doc));
         if (now == null ||
             now.accountId != accountId ||
+            now.toAccountId != toAccountId ||
             now.type != type ||
             now.category != category) {
           return false; // edited since: leave it
         }
         tx.update(doc, {
           'accountId': FieldValue.delete(),
+          if (toAccountId != null) 'toAccountId': FieldValue.delete(),
           if (removeSim) 'simSlot': FieldValue.delete(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -251,7 +261,11 @@ class SimBackfill {
 
     final changes = <BackfillChange>[];
     for (final r in candidates) {
-      if (!_single.contains(r.type)) {
+      final type = TransactionType.fromWire(r.type);
+      if (type == null) continue;
+      // A transfer (other than a Fuliza loan) needs the user to say where
+      // the money went, whatever the SIM: it goes to the form.
+      if (type == TransactionType.transfer && !r.id.endsWith('_FULIZA')) {
         skip('Needs two accounts: edit it in the form');
         continue;
       }
@@ -261,6 +275,22 @@ class SimBackfill {
       final slot = r.simSlot ?? sims[r.reference];
       if (slot == null) {
         skip('SIM unknown (not in this phone\'s messages)');
+        continue;
+      }
+      if (!_single.contains(r.type)) {
+        // A move between the user's own accounts: both sides follow from
+        // the SIM (its M-Pesa and its Ziidi or Fuliza), or it waits for the
+        // form (e.g. a transfer to Cash or the other SIM).
+        final pair = accounts == null
+            ? null
+            : AccountAssignment.pairForSim(type, r.id, slot, accounts);
+        if (pair == null) {
+          skip('Needs two accounts: edit it in the form');
+          continue;
+        }
+        changes.add(BackfillChange(r, slot, pair.from.id, evidence,
+            accountName: '${pair.from.name} → ${pair.to.name}',
+            toAccountId: pair.to.id));
         continue;
       }
       final account = accounts?.forSim(slot, AccountKind.mobileMoney);
@@ -281,7 +311,11 @@ class SimBackfill {
     List<TransactionModel> afterOf(Iterable<BackfillChange> some) => [
       for (final c in some)
         if (byId[c.record.id] case final t?)
-          t.withAccount(c.accountId, simSlot: c.simSlot),
+          t.withAccount(
+            c.accountId,
+            simSlot: c.simSlot,
+            toAccountId: c.toAccountId,
+          ),
     ];
     Map<MoneyAccount, double> impactOf(Iterable<BackfillChange> some) =>
         accounts == null
@@ -320,6 +354,7 @@ class SimBackfill {
             ...c.record.toJson(),
             'category': c.record.category,
             'setAccountId': c.accountId,
+            'setToAccountId': c.toAccountId,
             'setSim': c.setsSim,
           },
       ];
@@ -382,6 +417,7 @@ class SimBackfill {
             undone = await _repo.undo(
               entry.key,
               accountId: b['setAccountId'] as String,
+              toAccountId: b['setToAccountId'] as String?,
               removeSim: entry.value,
               type: b['type'] as String,
               category: b['category'] as String,

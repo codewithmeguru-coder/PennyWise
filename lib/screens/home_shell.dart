@@ -158,6 +158,9 @@ class _HomeShellState extends State<HomeShell> {
                   '"${twin.description}".'}'),
           behavior: SnackBarBehavior.floating,
           duration: Duration(seconds: twin == null ? 6 : 10),
+          // A snack bar with a button stays until tapped unless told
+          // otherwise; this one goes after its duration.
+          persist: false,
           action: twin == null
               ? SnackBarAction(
                   label: 'Edit',
@@ -397,6 +400,7 @@ class _HomeShellState extends State<HomeShell> {
           content: Text('Deleted "${t.description}"'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 8),
+          persist: false,
           action: SnackBarAction(label: 'Undo', onPressed: () => _undo(t)),
         ),
       );
@@ -429,6 +433,7 @@ class _HomeShellState extends State<HomeShell> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('"${after.description}" is now on $name'),
       behavior: SnackBarBehavior.floating,
+      persist: false,
       action: SnackBarAction(
         label: 'Undo',
         onPressed: () async {

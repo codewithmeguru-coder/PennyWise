@@ -199,7 +199,25 @@ class _SignedInScopeState extends State<_SignedInScope>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _categories; // start loading the user's categories straight away
-    _sms.start(); // does nothing unless the user turned detection on
+    _startDetectionOnceAccountsLoad();
+  }
+
+  /// SMS detection (which does nothing unless the user turned it on) starts
+  /// only once the accounts have loaded, so a message read at sign-in gets
+  /// its SIM's account instead of being saved with none. Failing to load
+  /// counts as loaded, so detection still runs.
+  void _startDetectionOnceAccountsLoad() {
+    if (_accounts.isLoaded) {
+      _sms.start();
+      return;
+    }
+    void loaded() {
+      if (!_accounts.isLoaded) return;
+      _accounts.removeListener(loaded);
+      if (mounted) _sms.start();
+    }
+
+    _accounts.addListener(loaded);
   }
 
   @override

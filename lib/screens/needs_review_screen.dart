@@ -259,11 +259,24 @@ class _AccountTab extends StatelessWidget {
 
   Future<void> _open(BuildContext context, TransactionModel t) async {
     if (!AccountAssignment.assignable(t)) {
+      // A move between the user's own accounts: with the SIM recorded, both
+      // sides follow from it (that SIM's M-Pesa and its Ziidi or Fuliza).
+      // Without it, or for any other move, the form asks for both.
+      final pair = AccountAssignment.pairForSim(
+          t.type, t.id, t.simSlot, accounts);
+      final after = pair == null
+          ? null
+          : t.withAccount(pair.from.id, toAccountId: pair.to.id);
+      final effect = after == null
+          ? null
+          : AssignmentWording.ofAfter(
+              t, after, accounts.all, store.transactions);
       await showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
+        isScrollControlled: true,
         builder: (context) => SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -274,14 +287,41 @@ class _AccountTab extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'This moves money between two of your accounts '
-                  '(a transfer, savings or a loan repayment), so it needs '
-                  'both. Open it in the form to choose them.',
-                ),
+                if (pair == null)
+                  const Text(
+                    'This moves money between two of your accounts '
+                    '(a transfer, savings or a loan repayment), so it needs '
+                    'both. Open it in the form to choose them.',
+                  )
+                else ...[
+                  Text(
+                    'This message came to SIM ${t.simSlot! + 1}, so it moved '
+                    'money from ${pair.from.name} to ${pair.to.name}.',
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${AssignmentWording.historyLabel} ${effect!.history}\n'
+                    '${AssignmentWording.cardsLabel} ${effect.cards}',
+                    key: const Key('assign-pair-effect'),
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    AssignmentWording.whatChanges,
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ],
                 const SizedBox(height: 12),
-                if (onEdit != null)
+                if (pair != null && onAssign != null)
                   FilledButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      onAssign!(t, after!);
+                    },
+                    child: Text('Use ${pair.from.name} → ${pair.to.name}'),
+                  ),
+                if (onEdit != null)
+                  (pair == null ? FilledButton.new : OutlinedButton.new)(
                     onPressed: () {
                       Navigator.of(context).pop();
                       onEdit!(t);
@@ -471,6 +511,24 @@ class AssignmentWording {
     for (final e in m.entries)
       '${e.key.name} ${e.value > 0 ? '+' : ''}${Formatters.currency(e.value)}',
   ].join(' · ');
+
+  /// What saving [after] in place of [t] does, as [of] says it, for a move
+  /// that sets both of its accounts.
+  static ({String history, String cards}) ofAfter(
+    TransactionModel t,
+    TransactionModel after,
+    List<MoneyAccount> accounts,
+    List<TransactionModel> all,
+  ) {
+    final history = AccountAssignment.impact(accounts, all, [after]);
+    final cards = AccountAssignment.cardChange(accounts, all, [after]);
+    return (
+      history: history.isEmpty
+          ? 'no change.'
+          : '${_amounts(history)} (not a balance change)',
+      cards: cards.isEmpty ? 'no change.' : _amounts(cards),
+    );
+  }
 
   /// What giving [t] account [a] does: to the accounts' past income minus
   /// spending ([AccountAssignment.impact]) and to the balances their cards

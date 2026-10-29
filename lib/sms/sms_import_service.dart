@@ -377,7 +377,17 @@ class SmsImportService extends ChangeNotifier {
     if (t.kind == SmsTransactionKind.deposit) return 'Cash deposit';
     final name = t.counterparty;
     if (name != null && name.isNotEmpty) {
-      return name.length > 100 ? name.substring(0, 100) : name;
+      // Only what the message says, with the direction it gives: money
+      // into or out of savings, sent to or received from someone. A
+      // payment to a till or Paybill keeps the business name alone.
+      final described = t.isSavingsProduct
+          ? '$name ${t.kind == SmsTransactionKind.received ? 'withdrawal' : 'deposit'}'
+          : switch (t.kind) {
+              SmsTransactionKind.sent => 'Sent to $name',
+              SmsTransactionKind.received => 'From $name',
+              _ => name,
+            };
+      return described.length > 100 ? described.substring(0, 100) : described;
     }
     return switch (t.kind) {
       SmsTransactionKind.airtime => 'Airtime',

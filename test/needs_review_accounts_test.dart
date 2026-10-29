@@ -107,6 +107,7 @@ class FakeBackfillRepo implements SimBackfillRepository {
     ZiidiRecord r, {
     int? simSlot,
     String? accountId,
+    String? toAccountId,
     bool clear = false,
     bool clearSim = false,
   }) => ZiidiRecord(
@@ -122,7 +123,7 @@ class FakeBackfillRepo implements SimBackfillRepository {
     updatedAt: _clock = _clock.add(const Duration(seconds: 1)),
     simSlot: clearSim ? null : (simSlot ?? r.simSlot),
     accountId: clear ? null : (accountId ?? r.accountId),
-    toAccountId: r.toAccountId,
+    toAccountId: clear ? null : (toAccountId ?? r.toAccountId),
   );
 
   @override
@@ -145,6 +146,7 @@ class FakeBackfillRepo implements SimBackfillRepository {
     records[r.id] = _with(
       now,
       accountId: change.accountId,
+      toAccountId: change.toAccountId,
       simSlot: change.setsSim ? change.simSlot : null,
     );
     return true;
@@ -154,6 +156,7 @@ class FakeBackfillRepo implements SimBackfillRepository {
   Future<bool> undo(
     String id, {
     required String accountId,
+    String? toAccountId,
     required bool removeSim,
     required String type,
     required String category,
@@ -161,6 +164,7 @@ class FakeBackfillRepo implements SimBackfillRepository {
     final now = records[id];
     if (now == null ||
         now.accountId != accountId ||
+        now.toAccountId != toAccountId ||
         now.type != type ||
         now.category != category) {
       return false;
@@ -616,6 +620,32 @@ void main() {
       expect(find.text('Account (1)'), findsOneWidget);
     });
 
+    testWidgets('a Ziidi deposit with its SIM recorded: one tap sets both '
+        'accounts; type, category and amount stay', (tester) async {
+      final t = sms(
+        'mpesa_UAT8',
+        TransactionType.savingsContribution,
+        150,
+        category: 'savings',
+        simSlot: 1,
+      );
+      final (repo, _, edits) = await show(tester, [t]);
+      await tester.tap(find.text('Item mpesa_UAT8'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('came to SIM 2'), findsOneWidget);
+      expect(find.byKey(const Key('assign-pair-effect')), findsOneWidget);
+      await tester.tap(find.textContaining('Use SIM 2 M-Pesa →'));
+      await tester.pumpAndSettle();
+      expect(edits, ['mpesa_UAT8 mpesa-sim2']);
+      final saved = repo.items.single;
+      expect([saved.accountId, saved.toAccountId], ['mpesa-sim2', 'ziidi-sim2']);
+      expect([saved.type, saved.categoryId, saved.amount], [
+        TransactionType.savingsContribution,
+        'savings',
+        150,
+      ]);
+    });
+
     testWidgets('a move needing two accounts opens the form instead', (
       tester,
     ) async {
@@ -968,6 +998,42 @@ void main() {
         expect(repo.writes, isEmpty);
         expect(store.saved, isEmpty);
       });
+    });
+
+    test('a Ziidi deposit with its SIM in the inbox gets both accounts; '
+        'Undo removes both', () async {
+      final ziidi = rec('UBF0000009', 'savings_contribution', 50);
+      final b = await make([ziidi], inbox: [inboxSms('UBF0000009', 1)]);
+      final p = await b.preview();
+      final c = p.changes.single;
+      expect([c.accountId, c.toAccountId, c.simSlot], [
+        'mpesa-sim2',
+        'ziidi-sim2',
+        1,
+      ]);
+      await b.apply(p);
+      final saved = repo.records[ziidi.id]!;
+      expect([saved.accountId, saved.toAccountId, saved.simSlot], [
+        'mpesa-sim2',
+        'ziidi-sim2',
+        1,
+      ]);
+      expect([saved.type, saved.category], [ziidi.type, ziidi.category]);
+      final r = await b.undo();
+      expect(r.done, 1);
+      final back = repo.records[ziidi.id]!;
+      expect([back.accountId, back.toAccountId, back.simSlot], [
+        null,
+        null,
+        null,
+      ]);
+    });
+
+    test('a transfer still goes to the form, whatever its SIM', () async {
+      final t = rec('UBF0000010', 'transfer', 500, sim: 0);
+      final p = await (await make([t])).preview();
+      expect(p.changes, isEmpty);
+      expect(p.skipped['Needs two accounts: edit it in the form'], 1);
     });
 
     test('the preview says how each card would move', () async {

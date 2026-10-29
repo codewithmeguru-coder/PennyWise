@@ -49,6 +49,37 @@ class AccountAssignment {
     );
   }
 
+  /// Both accounts of a move between the user's own accounts on SIM
+  /// [slot], from the SIM alone: a savings deposit or withdrawal is that
+  /// SIM's M-Pesa and its savings (Ziidi); a loan repayment is its M-Pesa
+  /// and its Fuliza; a Fuliza loan (id "..._FULIZA") goes from its Fuliza
+  /// to its M-Pesa. Null for anything else (e.g. a transfer to Cash or to
+  /// the other SIM, which only the user can say) or when an account is
+  /// missing: nothing is guessed.
+  static ({MoneyAccount from, MoneyAccount to})? pairForSim(
+    TransactionType type,
+    String id,
+    int? slot,
+    AccountResolver accounts,
+  ) {
+    if (slot == null) return null;
+    final wallet = accounts.forSim(slot, AccountKind.mobileMoney);
+    if (wallet == null) return null;
+    final MoneyAccount? other = switch (type) {
+      TransactionType.savingsContribution ||
+      TransactionType.savingsWithdrawal =>
+        accounts.forSim(slot, AccountKind.savings),
+      TransactionType.debtRepayment => accounts.forSim(slot, AccountKind.loan),
+      TransactionType.transfer when id.endsWith('_FULIZA') =>
+        accounts.forSim(slot, AccountKind.loan),
+      _ => null,
+    };
+    if (other == null) return null;
+    return type == TransactionType.transfer
+        ? (from: other, to: wallet) // Fuliza lends into M-Pesa
+        : (from: wallet, to: other);
+  }
+
   /// How each account card changes if [after] replace the records with the
   /// same ids in [all]: the card balance after minus before, per account,
   /// only where it changes. The card's own rules decide (starting balance
