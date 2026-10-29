@@ -14,7 +14,7 @@ class PinDots extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slots = length < PinHasher.minLength ? PinHasher.minLength : length;
-    final color = error ? AppColors.expense : AppColors.primary;
+    final color = error ? context.colors.expense : context.colors.primary;
     return Semantics(
       label: '$length digits entered',
       excludeSemantics: true,
@@ -108,7 +108,7 @@ class _PadButton extends StatelessWidget {
         width: 72,
         height: 72,
         child: Material(
-          color: AppColors.primary.withValues(alpha: 0.08),
+          color: context.colors.primary.withValues(alpha: 0.08),
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
@@ -120,8 +120,8 @@ class _PadButton extends StatelessWidget {
                   fontSize: 26,
                   fontWeight: FontWeight.w600,
                   color: onTap == null
-                      ? AppColors.textSecondary
-                      : AppColors.textPrimary,
+                      ? context.colors.textSecondary
+                      : context.colors.textPrimary,
                 ),
               ),
             ),

@@ -332,9 +332,9 @@ class _HomeShellState extends State<HomeShell> {
             ),
             ListTile(
               leading:
-                  const Icon(Icons.delete_outline, color: AppColors.expense),
-              title: const Text('Delete',
-                  style: TextStyle(color: AppColors.expense)),
+                  Icon(Icons.delete_outline, color: context.colors.expense),
+              title: Text('Delete',
+                  style: TextStyle(color: context.colors.expense)),
               onTap: () => Navigator.of(context).pop(_RowAction.delete),
             ),
           ],
@@ -374,7 +374,7 @@ class _HomeShellState extends State<HomeShell> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.expense),
+            style: TextButton.styleFrom(foregroundColor: context.colors.expense),
             child: const Text('Delete'),
           ),
         ],
@@ -607,6 +607,8 @@ class _HomeShellState extends State<HomeShell> {
         month: _month,
         onOpenBudgets: () => setState(() => _currentIndex = 2),
         onOpenTrends: _openTrends,
+        user: widget.user,
+        avatar: widget.avatar,
       ),
       TransactionsScreen(
         store: widget.store,
@@ -700,14 +702,14 @@ class _SignedInAs extends StatelessWidget {
               if (name.isNotEmpty)
                 Text(
                   name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: context.colors.textPrimary,
                   ),
                 ),
               Text(
                 user.email,
-                style: const TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
             ],
           ),

@@ -102,12 +102,12 @@ class _TrendsScreenState extends State<TrendsScreen> {
         const SizedBox(height: 8),
         _ComparisonCard(trend: trend),
         if (trend.months.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 24),
             child: Text(
               'No history in this range.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
           )
         else ...[
@@ -116,10 +116,10 @@ class _TrendsScreenState extends State<TrendsScreen> {
             GroupedBarChart(
               labels: labels,
               series: [
-                ChartSeries('Income', AppColors.income, [
+                ChartSeries('Income', context.colors.income, [
                   for (final m in trend.months) m.income,
                 ]),
-                ChartSeries('Expenses', AppColors.expense, [
+                ChartSeries('Expenses', context.colors.expense, [
                   for (final m in trend.months) m.expenses,
                 ]),
               ],
@@ -136,9 +136,9 @@ class _TrendsScreenState extends State<TrendsScreen> {
             GroupedBarChart(
               labels: labels,
               series: [
-                ChartSeries('Net', AppColors.income, [
+                ChartSeries('Net', context.colors.income, [
                   for (final m in trend.months) m.net,
-                ], negativeColor: AppColors.expense),
+                ], negativeColor: context.colors.expense),
               ],
               semanticLabel: [
                 for (final m in trend.months)
@@ -188,7 +188,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
             series: [
               ChartSeries(
                 trendName(focus),
-                ChartStyle.series(0),
+                ChartStyle.series(context, 0),
                 trend.categoryByMonth(focus),
               ),
             ],
@@ -199,19 +199,19 @@ class _TrendsScreenState extends State<TrendsScreen> {
     }
     final top = trend.topCategories;
     if (top.isEmpty) {
-      return const Text(
+      return Text(
         'No spending in this range.',
-        style: TextStyle(color: AppColors.textSecondary),
+        style: TextStyle(color: context.colors.textSecondary),
       );
     }
     final series = [
       for (var i = 0; i < top.length; i++)
         ChartSeries(
           trendName(top[i]),
-          ChartStyle.series(i),
+          ChartStyle.series(context, i),
           trend.categoryByMonth(top[i]),
         ),
-      ChartSeries('Other', AppColors.textSecondary, trend.otherByMonth()),
+      ChartSeries('Other', context.colors.textSecondary, trend.otherByMonth()),
     ];
     return StackedBarChart(
       labels: labels,
@@ -258,7 +258,7 @@ class _Note extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 2),
     child: Text(
       text,
-      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
     ),
   );
 }
@@ -332,7 +332,7 @@ class _ChangeRow extends StatelessWidget {
             width: 72,
             child: Text(
               label,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
           ),
           Expanded(
@@ -341,7 +341,7 @@ class _ChangeRow extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
-          Flexible(child: changeText(change, upIsGood: upIsGood)),
+          Flexible(child: changeText(context, change, upIsGood: upIsGood)),
         ],
       ),
     );
@@ -349,12 +349,16 @@ class _ChangeRow extends StatelessWidget {
 }
 
 /// "▲ KSh 1,850.00 (+17.5%)", "▼ …", "No change", or "new".
-Widget changeText(TrendChange c, {required bool upIsGood}) {
+Widget changeText(
+  BuildContext context,
+  TrendChange c, {
+  required bool upIsGood,
+}) {
   final diff = c.change;
   if (diff == 0) {
-    return const Text(
+    return Text(
       'No change',
-      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
     );
   }
   final up = diff > 0;
@@ -367,7 +371,7 @@ Widget changeText(TrendChange c, {required bool upIsGood}) {
     style: TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: good ? AppColors.income : AppColors.expense,
+      color: good ? context.colors.income : context.colors.expense,
     ),
   );
 }
@@ -402,7 +406,7 @@ class _Movers extends StatelessWidget {
                 '${Formatters.currency(m.amounts.previous)}'
                 ' → ${Formatters.currency(m.amounts.current)}',
               ),
-              trailing: changeText(m.amounts, upIsGood: false),
+              trailing: changeText(context, m.amounts, upIsGood: false),
               onTap: () => onFocus(m.categoryId),
             ),
       ],

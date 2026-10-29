@@ -10,6 +10,8 @@ import '../accounts/account_repository.dart';
 import '../sms/sms_import_service.dart';
 import '../widgets/account_cards.dart';
 import '../models/transaction_model.dart';
+import '../services/auth_service.dart';
+import '../services/avatar_store.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/balance_card.dart';
@@ -17,6 +19,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/monthly_overview_card.dart';
 import '../widgets/section_header.dart';
 import '../widgets/transaction_tile.dart';
+import '../widgets/welcome_greeting.dart';
 
 /// Home tab: balances, the monthly overview, and the most recent
 /// transactions.
@@ -39,6 +42,8 @@ class DashboardScreen extends StatelessWidget {
     this.month,
     this.onOpenBudgets,
     this.onOpenTrends,
+    this.user,
+    this.avatar,
   });
 
   final TransactionStore store;
@@ -80,21 +85,38 @@ class DashboardScreen extends StatelessWidget {
   /// Opens month-by-month Trends.
   final VoidCallback? onOpenTrends;
 
+  /// Who is signed in: the header greets them by first name beside their
+  /// photo. Without one, the header says PennyWise.
+  final AppUser? user;
+
+  /// [user]'s own uploaded photo.
+  final AvatarStore? avatar;
+
   /// Called when the user taps a transaction (opens the edit form).
   final ValueChanged<TransactionModel> onTransactionTap;
 
   /// Opens the Edit / Delete menu for a transaction.
   final ValueChanged<TransactionModel>? onTransactionLongPress;
 
-  static Widget _headerMonth(DateTime month) => Text(
+  static Widget _headerMonth(BuildContext context, DateTime month) => Text(
     Formatters.monthYear(month),
     key: const Key('home-header-month'),
-    style: const TextStyle(
+    style: TextStyle(
       fontSize: 13,
       fontWeight: FontWeight.w500,
-      color: AppColors.textSecondary,
+      color: context.colors.textSecondary,
     ),
   );
+
+  /// The month the overview shows (shared with Budgets), so the header
+  /// never names a different one.
+  Widget _monthOnShow(BuildContext context) => switch (month) {
+    final m? => ValueListenableBuilder<DateTime>(
+      valueListenable: m,
+      builder: (context, shown, _) => _headerMonth(context, shown),
+    ),
+    null => _headerMonth(context, DateTime.now()),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -116,21 +138,17 @@ class DashboardScreen extends StatelessWidget {
                       icon: const Icon(Icons.menu_rounded),
                       onPressed: onOpenMenu,
                     ),
-              title: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('PennyWise'),
-                  // The month the overview shows (shared with Budgets), so
-                  // the header never names a different one.
-                  if (month case final m?)
-                    ValueListenableBuilder<DateTime>(
-                      valueListenable: m,
-                      builder: (context, shown, _) => _headerMonth(shown),
-                    )
-                  else
-                    _headerMonth(DateTime.now()),
-                ],
-              ),
+              title: switch (user) {
+                final u? => WelcomeGreeting(
+                  user: u,
+                  avatar: avatar,
+                  subtitle: _monthOnShow(context),
+                ),
+                null => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [const Text('PennyWise'), _monthOnShow(context)],
+                ),
+              },
               actions: [
                 if (onOpenSettings != null)
                   IconButton(
@@ -304,10 +322,10 @@ class _StaleDetectionNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: AppColors.warning.withValues(alpha: 0.10),
+      color: context.colors.warning.withValues(alpha: 0.10),
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
-        leading: const Icon(Icons.sms_failed_outlined, color: AppColors.warning),
+        leading: Icon(Icons.sms_failed_outlined, color: context.colors.warning),
         title: Text('SMS detection last ran '
             '${Formatters.relativeDate(lastScan).toLowerCase()}'),
         subtitle: const Text('PennyWise checks your messages only while it is '

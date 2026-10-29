@@ -209,7 +209,7 @@ class _BalanceReviewScreenState extends State<BalanceReviewScreen> {
             children: [
               Expanded(
                 child: Text(label,
-                    style: const TextStyle(color: AppColors.textSecondary)),
+                    style: TextStyle(color: context.colors.textSecondary)),
               ),
               const SizedBox(width: 8),
               Flexible(
@@ -293,29 +293,29 @@ class _StatusBox extends StatelessWidget {
     final (icon, color, text) = switch (balance.status) {
       BalanceStatus.verified => (
           Icons.verified_rounded,
-          AppColors.income,
+          context.colors.income,
           'Matches the latest SMS.'
         ),
       BalanceStatus.mismatch => (
           Icons.warning_amber_rounded,
-          AppColors.warning,
+          context.colors.warning,
           'The latest SMS doesn\'t match PennyWise. Your balance has not been '
               'changed.'
         ),
       BalanceStatus.anchored => (
           Icons.flag_outlined,
-          AppColors.textSecondary,
+          context.colors.textSecondary,
           'From your starting balance. No SMS since then to check it with.'
         ),
       BalanceStatus.fromSms => (
           Icons.sms_outlined,
-          AppColors.textSecondary,
+          context.colors.textSecondary,
           'No starting balance: taken from the latest SMS and what happened '
               'after it.'
         ),
       BalanceStatus.unverified => (
           Icons.help_outline_rounded,
-          AppColors.warning,
+          context.colors.warning,
           'Not verified: no starting balance and no SMS balance. This only '
               'adds up recorded transactions, which may be incomplete.'
         ),
@@ -353,10 +353,10 @@ class BalanceAssessmentScreen extends StatelessWidget {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const Text(
+                Text(
                   'Nothing here changes your data. Each item says what to do '
                   'next.',
-                  style: TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: context.colors.textSecondary),
                 ),
                 for (final f in findings)
                   Card(
@@ -373,8 +373,8 @@ class BalanceAssessmentScreen extends StatelessWidget {
                           Text(f.detail),
                           const SizedBox(height: 6),
                           Text('Next: ${f.action}',
-                              style: const TextStyle(
-                                  color: AppColors.textSecondary)),
+                              style: TextStyle(
+                                  color: context.colors.textSecondary)),
                         ],
                       ),
                     ),

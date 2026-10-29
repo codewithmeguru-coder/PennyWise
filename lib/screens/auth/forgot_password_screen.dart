@@ -163,13 +163,13 @@ class _SentNotice extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
+        color: context.colors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.mark_email_read_outlined, color: AppColors.primary),
+          Icon(Icons.mark_email_read_outlined, color: context.colors.primary),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -181,10 +181,10 @@ class _SentNotice extends StatelessWidget {
                   'spam folder.',
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'If you use Continue with Google, sign in that way '
                   'instead.',
-                  style: TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: context.colors.textSecondary),
                 ),
               ],
             ),

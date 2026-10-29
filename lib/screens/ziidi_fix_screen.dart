@@ -153,10 +153,10 @@ class _ZiidiFixScreenState extends State<ZiidiFixScreen> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    const Text(
+                    Text(
                       'Older Ziidi deposits and withdrawals were saved as '
                       'spending and income. Nothing has been changed yet.',
-                      style: TextStyle(color: AppColors.textSecondary),
+                      style: TextStyle(color: context.colors.textSecondary),
                     ),
                     const SizedBox(height: 12),
                     Text('Savings deposits: ${p.contributions} '
@@ -168,7 +168,7 @@ class _ZiidiFixScreenState extends State<ZiidiFixScreen> {
                     for (final e in p.skipped.entries)
                       Text('Left alone, ${e.key.toLowerCase()}: ${e.value}',
                           style:
-                              const TextStyle(color: AppColors.textSecondary)),
+                              TextStyle(color: context.colors.textSecondary)),
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed:

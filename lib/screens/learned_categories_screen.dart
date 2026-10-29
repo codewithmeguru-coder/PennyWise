@@ -75,8 +75,8 @@ class LearnedCategoriesScreen extends StatelessWidget {
                   : 'Money paid';
               return ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                  child: Icon(category.icon, color: AppColors.primary),
+                  backgroundColor: context.colors.primary.withValues(alpha: 0.1),
+                  child: Icon(category.icon, color: context.colors.primary),
                 ),
                 title: Text(rule.label ?? rule.key),
                 subtitle: Text('$direction → ${category.name}'),

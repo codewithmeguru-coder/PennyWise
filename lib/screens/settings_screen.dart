@@ -15,6 +15,7 @@ import '../sms/fuliza_import.dart';
 import '../sms/sms_gateway.dart';
 import '../sms/sms_import_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/appearance.dart';
 import '../utils/formatters.dart';
 import 'app_lock_settings_screen.dart';
 import 'categories_screen.dart';
@@ -187,8 +188,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       if (avatar.error != null)
                         Text(
                           'Couldn\'t load your photo. ${avatar.error!}',
-                          style: const TextStyle(
-                              fontSize: 12, color: AppColors.textSecondary),
+                          style: TextStyle(
+                              fontSize: 12, color: context.colors.textSecondary),
                         ),
                       Wrap(
                         spacing: 4,
@@ -365,6 +366,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           final permissionMissing = supported && enabled && !_sms.hasPermission;
 
           final appLock = AppLockScope.maybeOf(context);
+          final appearance = AppearanceScope.maybeOf(context);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
@@ -376,8 +378,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (appLock != null) ...[
                 Card(
                   child: ListTile(
-                    leading: const Icon(Icons.lock_outline_rounded,
-                        color: AppColors.primary),
+                    leading: Icon(Icons.lock_outline_rounded,
+                        color: context.colors.primary),
                     title: const Text(
                       'App Lock',
                       style: TextStyle(fontWeight: FontWeight.w600),
@@ -396,8 +398,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (widget.categories case final registry?) ...[
                 Card(
                   child: ListTile(
-                    leading: const Icon(Icons.category_outlined,
-                        color: AppColors.primary),
+                    leading: Icon(Icons.category_outlined,
+                        color: context.colors.primary),
                     title: const Text('Categories'),
                     subtitle: const Text('Add your own, rename or turn them '
                         'off'),
@@ -414,8 +416,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (widget.categoryRules case final rules?) ...[
                 Card(
                   child: ListTile(
-                    leading: const Icon(Icons.auto_awesome_outlined,
-                        color: AppColors.primary),
+                    leading: Icon(Icons.auto_awesome_outlined,
+                        color: context.colors.primary),
                     title: const Text(
                       'Learned categories',
                       style: TextStyle(fontWeight: FontWeight.w600),
@@ -450,7 +452,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 _Notice(
                   icon: Icons.warning_amber_rounded,
-                  color: AppColors.warning,
+                  color: context.colors.warning,
                   text: 'Detection is on, but PennyWise no longer has SMS '
                       'permission, so nothing is being detected. Allow SMS '
                       'access in Settings, or turn detection off.',
@@ -561,8 +563,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               'Last checked: '
                               '${Formatters.relativeDate(_sms.lastScan!)} at '
                               '${_time(_sms.lastScan!)}',
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
+                              style: TextStyle(
+                                color: context.colors.textSecondary,
                                 fontSize: 13,
                               ),
                             ),
@@ -578,7 +580,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 _Notice(
                   icon: Icons.info_outline_rounded,
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                   text: [
                     if ((_sms.skipped[SkipReason.fulizaWaiting] ?? 0) > 0)
                       '${_sms.skipped[SkipReason.fulizaWaiting]} Fuliza '
@@ -595,10 +597,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 _Notice(
                   icon: Icons.cloud_off_rounded,
-                  color: AppColors.expense,
+                  color: context.colors.expense,
                   text: '${_sms.lastError} PennyWise will try again next '
                       'time you open the app.',
                 ),
+              ],
+              if (appearance != null) ...[
+                const SizedBox(height: 12),
+                _AppearanceCard(controller: appearance),
               ],
               const SizedBox(height: 20),
               const _HowItWorks(),
@@ -614,6 +620,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
       '${t.minute.toString().padLeft(2, '0')}';
 }
 
+/// Light, Dark, or follow the phone. Applies at once and is remembered.
+class _AppearanceCard extends StatelessWidget {
+  const _AppearanceCard({required this.controller});
+
+  final AppearanceController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = controller.value;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.palette_outlined, color: context.colors.primary),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Text(
+                    'Appearance',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Text(
+                  AppearanceController.label(mode),
+                  key: const Key('appearance-current'),
+                  style: TextStyle(color: context.colors.textSecondary),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<ThemeMode>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                    value: ThemeMode.system,
+                    label: Text('System', key: Key('appearance-system')),
+                    icon: Icon(Icons.brightness_auto_outlined),
+                  ),
+                  ButtonSegment(
+                    value: ThemeMode.light,
+                    label: Text('Light', key: Key('appearance-light')),
+                    icon: Icon(Icons.light_mode_outlined),
+                  ),
+                  ButtonSegment(
+                    value: ThemeMode.dark,
+                    label: Text('Dark', key: Key('appearance-dark')),
+                    icon: Icon(Icons.dark_mode_outlined),
+                  ),
+                ],
+                selected: {mode},
+                onSelectionChanged: (picked) => controller.choose(picked.single),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Shown before Android's permission dialog: what is read, and why.
 class _PermissionExplanationDialog extends StatelessWidget {
   const _PermissionExplanationDialog();
@@ -621,7 +692,7 @@ class _PermissionExplanationDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      icon: const Icon(Icons.sms_outlined, color: AppColors.primary),
+      icon: Icon(Icons.sms_outlined, color: context.colors.primary),
       title: const Text('Allow PennyWise to read transaction SMS?'),
       content: const SingleChildScrollView(
         child: Text(
@@ -656,8 +727,8 @@ class _HowItWorks extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const style = TextStyle(color: AppColors.textSecondary, height: 1.4);
-    return const Padding(
+    final style = TextStyle(color: context.colors.textSecondary, height: 1.4);
+    return Padding(
       padding: EdgeInsets.symmetric(horizontal: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -666,7 +737,7 @@ class _HowItWorks extends StatelessWidget {
             'How it works',
             style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: context.colors.textPrimary,
             ),
           ),
           SizedBox(height: 6),
@@ -719,7 +790,7 @@ class _Notice extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(text, style: const TextStyle(color: AppColors.textPrimary)),
+                Text(text, style: TextStyle(color: context.colors.textPrimary)),
                 if (actionLabel != null)
                   TextButton(
                     onPressed: onAction,

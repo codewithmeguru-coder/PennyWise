@@ -15,6 +15,7 @@ import 'services/photo_picker.dart';
 import 'sms/sms_gateway.dart';
 import 'sms/sms_settings.dart';
 import 'theme/app_theme.dart';
+import 'theme/appearance.dart';
 
 /// Root widget: owns the [AuthService] and applies the theme.
 class PennyWiseApp extends StatefulWidget {
@@ -32,6 +33,7 @@ class PennyWiseApp extends StatefulWidget {
     this.smsGateway,
     this.smsSettingsForUser,
     this.appLock,
+    this.appearance,
   });
 
   /// Optional auth service, so tests can run without Firebase.
@@ -78,6 +80,10 @@ class PennyWiseApp extends StatefulWidget {
   /// backed by secure storage and the device's biometrics.
   final AppLockController? appLock;
 
+  /// Optional Light / Dark / System choice, so tests can keep it in
+  /// memory. Defaults to one saved on this phone.
+  final AppearanceController? appearance;
+
   @override
   State<PennyWiseApp> createState() => _PennyWiseAppState();
 }
@@ -88,6 +94,9 @@ class _PennyWiseAppState extends State<PennyWiseApp> {
 
   late final AppLockController _appLock =
       (widget.appLock ?? AppLockController())..init();
+
+  late final AppearanceController _appearance =
+      (widget.appearance ?? AppearanceController())..init();
 
   /// "Forgot PIN? Sign out": signs out of Firebase first (if that fails,
   /// nothing changes), then clears App Lock on this device only. No cloud
@@ -100,15 +109,28 @@ class _PennyWiseAppState extends State<PennyWiseApp> {
   @override
   void dispose() {
     _appLock.dispose();
+    _appearance.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    return AppearanceScope(
+      controller: _appearance,
+      child: ValueListenableBuilder<ThemeMode>(
+        valueListenable: _appearance,
+        builder: (context, mode, _) => _app(mode),
+      ),
+    );
+  }
+
+  Widget _app(ThemeMode mode) {
     return MaterialApp(
       title: 'PennyWise',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: mode,
       // App Lock wraps every route and dialog, not just one screen.
       builder: (context, child) => AppLockScope(
         controller: _appLock,

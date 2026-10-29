@@ -32,24 +32,24 @@ class EmptyState extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 36,
-              backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-              child: Icon(icon, size: 36, color: AppColors.primary),
+              backgroundColor: context.colors.primary.withValues(alpha: 0.1),
+              child: Icon(icon, size: 36, color: context.colors.primary),
             ),
             const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: context.colors.textPrimary,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: 16),

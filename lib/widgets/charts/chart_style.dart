@@ -10,19 +10,23 @@ class ChartStyle {
   ChartStyle._();
 
   /// Series colours in order. SIM 1 and SIM 2 always get the first two.
-  static const List<Color> palette = [
-    AppColors.primary,
-    AppColors.savings,
-    AppColors.warning,
-    AppColors.neutral,
-    AppColors.expense,
+  static List<Color> palette(BuildContext context) => [
+    context.colors.primary,
+    context.colors.savings,
+    context.colors.warning,
+    context.colors.neutral,
+    context.colors.expense,
   ];
 
-  static Color series(int index) => palette[index % palette.length];
+  static Color series(BuildContext context, int index) {
+    final colors = palette(context);
+    return colors[index % colors.length];
+  }
 
   /// SIM 1, SIM 2, or grey for an unknown SIM.
-  static Color sim(int? slot) =>
-      slot == null ? AppColors.textSecondary : series(slot);
+  static Color sim(BuildContext context, int? slot) => slot == null
+      ? context.colors.textSecondary
+      : series(context, slot);
 
   static const double height = 200;
   static const double barWidth = 14;
@@ -30,15 +34,15 @@ class ChartStyle {
     top: Radius.circular(4),
   );
 
-  static const TextStyle axisLabel = TextStyle(
+  static TextStyle axisLabel(BuildContext context) => TextStyle(
     fontSize: 11,
-    color: AppColors.textSecondary,
+    color: context.colors.textSecondary,
   );
 
-  static FlGridData get grid => FlGridData(
+  static FlGridData grid(BuildContext context) => FlGridData(
     drawVerticalLine: false,
     getDrawingHorizontalLine: (_) =>
-        const FlLine(color: AppColors.divider, strokeWidth: 1),
+        FlLine(color: context.colors.divider, strokeWidth: 1),
   );
 
   static FlBorderData get border => FlBorderData(show: false);
@@ -79,13 +83,16 @@ class ChartStyle {
     return magnitude.firstWhere((m) => m >= raw, orElse: () => raw);
   }
 
-  static BarTouchData touch(String Function(int group, int rod) label) =>
-      BarTouchData(
+  /// Dark tooltip on light cards, light tooltip on dark ones.
+  static BarTouchData touch(
+    BuildContext context,
+    String Function(int group, int rod) label,
+  ) => BarTouchData(
         touchTooltipData: BarTouchTooltipData(
-          getTooltipColor: (_) => AppColors.textPrimary,
+          getTooltipColor: (_) => context.colors.textPrimary,
           getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
             label(groupIndex, rodIndex),
-            const TextStyle(color: Colors.white, fontSize: 12),
+            TextStyle(color: context.colors.surface, fontSize: 12),
           ),
         ),
       );
@@ -155,15 +162,15 @@ class GroupedBarChart extends StatelessWidget {
                   horizontalLines: [
                     HorizontalLine(
                       y: 0,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                       strokeWidth: 1,
                     ),
                   ],
                 )
               : null,
-          gridData: ChartStyle.grid,
+          gridData: ChartStyle.grid(context),
           borderData: ChartStyle.border,
-          barTouchData: ChartStyle.touch(
+          barTouchData: ChartStyle.touch(context, 
             (g, r) => ChartStyle.money(
               series.length > 1
                   ? '${labels[g]} · ${series[r].name}'
@@ -183,7 +190,7 @@ class GroupedBarChart extends StatelessWidget {
                   meta: meta,
                   child: Text(
                     ChartStyle.compact(value),
-                    style: ChartStyle.axisLabel,
+                    style: ChartStyle.axisLabel(context),
                   ),
                 ),
               ),
@@ -196,7 +203,7 @@ class GroupedBarChart extends StatelessWidget {
                   meta: meta,
                   child: Text(
                     labels[value.toInt()],
-                    style: ChartStyle.axisLabel,
+                    style: ChartStyle.axisLabel(context),
                   ),
                 ),
               ),
@@ -248,7 +255,7 @@ class GroupedBarChart extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(s.name, style: ChartStyle.axisLabel),
+                        Text(s.name, style: ChartStyle.axisLabel(context)),
                       ],
                     ),
                 ],

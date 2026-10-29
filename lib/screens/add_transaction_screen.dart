@@ -168,14 +168,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Color get _accent => switch (_type) {
-        TransactionType.income || TransactionType.refund => AppColors.income,
+        TransactionType.income || TransactionType.refund => context.colors.income,
         TransactionType.expense ||
         TransactionType.debtRepayment =>
-          AppColors.expense,
-        TransactionType.transfer => AppColors.neutral,
+          context.colors.expense,
+        TransactionType.transfer => context.colors.neutral,
         TransactionType.savingsContribution ||
         TransactionType.savingsWithdrawal =>
-          AppColors.savings,
+          context.colors.savings,
       };
 
   /// Fees apply when money leaves an account through a provider.
@@ -387,7 +387,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.expense),
+            style: TextButton.styleFrom(foregroundColor: context.colors.expense),
             child: const Text('Delete'),
           ),
         ],
@@ -539,8 +539,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   const SizedBox(height: 8),
                   Text(
                     help,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
                       fontSize: 13,
                     ),
                   ),
@@ -686,9 +686,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     _type == TransactionType.refund
                         ? 'Category of the purchase refunded'
                         : 'Category',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      color: context.colors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -776,30 +776,30 @@ class _DetectedInfo extends StatelessWidget {
         // No divider lines when the tile expands.
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          leading: const Icon(Icons.sms_outlined, color: AppColors.primary),
+          leading: Icon(Icons.sms_outlined, color: context.colors.primary),
           title: Text('Detected from ${t.source.label} SMS'),
           subtitle: Text(
             [
               if (t.reference != null) 'Code ${t.reference}',
               'Check the category and details',
             ].join(' · '),
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
           ),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Original message (phone and account numbers masked)',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: context.colors.textPrimary,
                 fontSize: 13,
               ),
             ),
             const SizedBox(height: 6),
             SelectableText(
               sms ?? 'Not available.',
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
           ],
         ),
@@ -820,7 +820,7 @@ class _ConvertCashCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: EdgeInsets.zero,
-      color: AppColors.warning.withValues(alpha: 0.10),
+      color: context.colors.warning.withValues(alpha: 0.10),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -830,9 +830,9 @@ class _ConvertCashCard extends StatelessWidget {
               withdrawal
                   ? 'Saved as an expense'
                   : 'Saved as income',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: context.colors.textPrimary,
               ),
             ),
             const SizedBox(height: 4),
@@ -842,8 +842,8 @@ class _ConvertCashCard extends StatelessWidget {
                       'As a transfer, only its fee counts as spending.'
                   : 'A cash deposit moves your money from Cash to M-Pesa. '
                       'As a transfer, it is not counted as income.',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
+              style: TextStyle(
+                color: context.colors.textSecondary,
                 fontSize: 13,
               ),
             ),

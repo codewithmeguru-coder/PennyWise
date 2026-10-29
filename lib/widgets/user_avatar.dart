@@ -42,14 +42,14 @@ class UserAvatar extends StatelessWidget {
       radius: radius,
       backgroundColor: onDark
           ? Colors.white
-          : AppColors.primary.withValues(alpha: 0.1),
+          : context.colors.primary.withValues(alpha: 0.1),
       foregroundImage: image,
       // A broken or unreachable photo: the letter underneath stays visible.
       onForegroundImageError: image == null ? null : (_, _) {},
       child: Text(
         initial.toUpperCase(),
         style: TextStyle(
-          color: AppColors.primary,
+          color: context.colors.primary,
           fontWeight: FontWeight.w700,
           // Larger avatars (the drawer header) get a larger letter.
           fontSize: radius > 22 ? radius * 0.75 : null,

@@ -132,7 +132,7 @@ class _SimBackfillScreenState extends State<SimBackfillScreen> {
           '${Formatters.shortDate(c.record.date)} · '
           '${Formatters.currency(c.record.amount)} · ${c.record.type} → '
           '${c.accountName ?? c.accountId}${c.setsSim ? ' (SIM ${c.simSlot + 1})' : ''}',
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
         ),
       if (p.changes.length > 300)
         Text(
@@ -176,11 +176,11 @@ class _SimBackfillScreenState extends State<SimBackfillScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const Text(
+                Text(
                   'SMS transactions with no account, given the account of '
                   'the SIM they came to. The SIM is never guessed. '
                   'Nothing has been changed yet.',
-                  style: TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: context.colors.textSecondary),
                 ),
                 const SizedBox(height: 8),
                 const Text(
@@ -205,7 +205,7 @@ class _SimBackfillScreenState extends State<SimBackfillScreen> {
                 for (final e in p.skipped.entries)
                   Text(
                     'Left alone, ${e.key.toLowerCase()}: ${e.value}',
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: context.colors.textSecondary),
                   ),
                 // Each group is applied on its own.
                 ..._group(p, SimEvidence.stored),

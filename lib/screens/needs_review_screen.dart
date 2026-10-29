@@ -303,12 +303,12 @@ class _AccountTab extends StatelessWidget {
                     '${AssignmentWording.historyLabel} ${effect!.history}\n'
                     '${AssignmentWording.cardsLabel} ${effect.cards}',
                     key: const Key('assign-pair-effect'),
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: context.colors.textSecondary),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     AssignmentWording.whatChanges,
-                    style: TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: context.colors.textSecondary),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -363,13 +363,13 @@ class _AccountTab extends StatelessWidget {
                     ? 'The SIM wasn\'t recorded for this message. Pick the '
                           'account it came from.'
                     : 'This message came to SIM ${t.simSlot! + 1}.',
-                style: const TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 AssignmentWording.whatChanges,
                 key: Key('assign-what-changes'),
-                style: TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
               const SizedBox(height: 12),
               for (final a in [
@@ -479,7 +479,7 @@ class _AccountChoice extends StatelessWidget {
       child: ListTile(
         leading: Icon(
           suggested ? Icons.sim_card_rounded : Icons.account_balance_wallet,
-          color: AppColors.primary,
+          color: context.colors.primary,
         ),
         title: Text(suggested ? 'Use ${account.name}' : account.name),
         subtitle: Text(

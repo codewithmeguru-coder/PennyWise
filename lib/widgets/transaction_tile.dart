@@ -33,15 +33,15 @@ class TransactionTile extends StatelessWidget {
     final t = transaction;
     final category = DefaultCategories.byId(t.categoryId);
     final (color, sign) = switch (t.type) {
-      TransactionType.income || TransactionType.refund => (AppColors.income, '+'),
+      TransactionType.income || TransactionType.refund => (context.colors.income, '+'),
       TransactionType.expense ||
       TransactionType.debtRepayment =>
-        (AppColors.expense, '-'),
+        (context.colors.expense, '-'),
       // Moves between your own money: no sign, it wasn't earned or spent.
-      TransactionType.transfer => (AppColors.neutral, ''),
+      TransactionType.transfer => (context.colors.neutral, ''),
       TransactionType.savingsContribution ||
       TransactionType.savingsWithdrawal =>
-        (AppColors.savings, ''),
+        (context.colors.savings, ''),
     };
     final accounts = switch (t.type) {
       // Borrowed (a Fuliza loan): from the loan, which has no generic account.
@@ -68,9 +68,9 @@ class TransactionTile extends StatelessWidget {
         t.description,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: context.colors.textPrimary,
         ),
       ),
       subtitle: Text(
@@ -85,7 +85,7 @@ class TransactionTile extends StatelessWidget {
           ?accounts,
           if (paidWithFuliza) 'Paid with Fuliza loan',
         ].join(' · '),
-        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
       ),
       trailing: _Amount(transaction: t, sign: sign, color: color),
     );
@@ -128,7 +128,7 @@ class _Amount extends StatelessWidget {
         _line('$sign${Formatters.currency(main)}'),
         Text(
           spending ? 'incl. $feeText fee' : '+$feeText fee',
-          style: const TextStyle(color: AppColors.expense, fontSize: 12),
+          style: TextStyle(color: context.colors.expense, fontSize: 12),
         ),
       ],
     );

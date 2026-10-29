@@ -441,10 +441,11 @@ void main() {
       expect(find.text('KSh 0.30'), findsWidgets);
 
       await tester.scrollUntilVisible(
-        find.text('Fee ledger'),
+        find.textContaining('Fee KSh 0.30 on KSh 30.00'),
         200,
         scrollable: list,
       );
+      expect(find.text('Fee ledger'), findsOneWidget);
       expect(find.textContaining('Fee KSh 0.30 on KSh 30.00'), findsOneWidget);
     });
 
@@ -494,6 +495,11 @@ void main() {
       List<String> monthLabels(WidgetTester tester) => tester
           .widget<GroupedBarChart>(find.byType(GroupedBarChart).first)
           .labels;
+      // The summary's figures (the monthly table repeats some amounts).
+      Finder summary(String amount) => find.descendant(
+        of: find.byType(GridView),
+        matching: find.text(amount),
+      );
       int ledgerRows() => find.byType(ListTile).evaluate().length;
 
       testWidgets('no ✕ while showing all time', (tester) async {
@@ -506,15 +512,15 @@ void main() {
         await showTall(tester);
         await tester.tap(find.text('SIM 1').first);
         await tester.pumpAndSettle();
-        expect(find.text('KSh 1.50'), findsOneWidget); // all-time SIM 1 fees
+        expect(summary('KSh 1.50'), findsOneWidget); // all-time SIM 1 fees
         expect(monthLabels(tester), hasLength(2));
         expect(ledgerRows(), 2);
 
-        await tester.tap(find.text('Month'));
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Month'));
         await tester.pumpAndSettle();
         expect(clear, findsOneWidget);
         expect(find.text('KSh 0.50'), findsWidgets); // this month only
-        expect(find.text('KSh 1.50'), findsNothing);
+        expect(summary('KSh 1.50'), findsNothing);
         expect(monthLabels(tester), hasLength(1));
         expect(ledgerRows(), 1);
         expect(find.text('Fee KSh 1.00 on KSh 100.00'), findsNothing);
@@ -522,7 +528,7 @@ void main() {
         await tester.tap(clear);
         await tester.pumpAndSettle();
         expect(clear, findsNothing);
-        expect(find.text('KSh 1.50'), findsOneWidget);
+        expect(summary('KSh 1.50'), findsOneWidget);
         expect(monthLabels(tester), hasLength(2));
         expect(ledgerRows(), 2);
         expect(find.text('Fee KSh 1.00 on KSh 100.00'), findsOneWidget);
@@ -557,14 +563,14 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(clear, findsOneWidget);
-        expect(find.text('KSh 0.80'), findsOneWidget); // both SIMs, one day
+        expect(summary('KSh 0.80'), findsOneWidget); // both SIMs, one day
         expect(ledgerRows(), 2);
 
         await tester.tap(clear);
         await tester.pumpAndSettle();
         expect(clear, findsNothing);
         expect(find.text('Dates…'), findsOneWidget);
-        expect(find.text('KSh 1.80'), findsOneWidget); // all time, all SIMs
+        expect(summary('KSh 1.80'), findsOneWidget); // all time, all SIMs
         expect(ledgerRows(), 3);
         expect(monthLabels(tester), hasLength(2));
       });

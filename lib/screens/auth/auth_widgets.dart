@@ -17,26 +17,26 @@ class AuthHeader extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 28,
-          backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-          child: const Icon(
+          backgroundColor: context.colors.primary.withValues(alpha: 0.1),
+          child: Icon(
             Icons.account_balance_wallet_rounded,
             size: 28,
-            color: AppColors.primary,
+            color: context.colors.primary,
           ),
         ),
         const SizedBox(height: 20),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: context.colors.textPrimary,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           subtitle,
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: context.colors.textSecondary),
         ),
       ],
     );
@@ -54,18 +54,18 @@ class AuthErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.expense.withValues(alpha: 0.08),
+        color: context.colors.expense.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.expense.withValues(alpha: 0.3)),
+        border: Border.all(color: context.colors.expense.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: AppColors.expense),
+          Icon(Icons.error_outline_rounded, color: context.colors.expense),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: AppColors.expense),
+              style: TextStyle(color: context.colors.expense),
             ),
           ),
         ],
@@ -94,12 +94,12 @@ class AuthSubmitButton extends StatelessWidget {
     return FilledButton(
       onPressed: loading ? null : onPressed,
       child: loading
-          ? const SizedBox(
+          ? SizedBox(
               width: 22,
               height: 22,
               child: CircularProgressIndicator(
                 strokeWidth: 2.5,
-                color: AppColors.primary,
+                color: context.colors.primary,
               ),
             )
           : Text(label),
@@ -113,17 +113,17 @@ class AuthDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Expanded(child: Divider(color: AppColors.divider)),
+        Expanded(child: Divider(color: context.colors.divider)),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
           child: Text(
             'or',
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.colors.textSecondary),
           ),
         ),
-        Expanded(child: Divider(color: AppColors.divider)),
+        Expanded(child: Divider(color: context.colors.divider)),
       ],
     );
   }
@@ -161,24 +161,24 @@ class GoogleSignInButton extends StatelessWidget {
     return OutlinedButton(
       onPressed: loading ? null : onPressed,
       style: OutlinedButton.styleFrom(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        disabledForegroundColor: AppColors.textSecondary,
+        backgroundColor: context.colors.surface,
+        foregroundColor: context.colors.textPrimary,
+        disabledForegroundColor: context.colors.textSecondary,
         minimumSize: const Size.fromHeight(52),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
         // Google's guidelines ask for a visible outline on white buttons.
-        side: const BorderSide(color: AppColors.textSecondary),
+        side: BorderSide(color: context.colors.textSecondary),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
       child: loading
-          ? const SizedBox(
+          ? SizedBox(
               width: 22,
               height: 22,
               child: CircularProgressIndicator(
                 strokeWidth: 2.5,
-                color: AppColors.primary,
+                color: context.colors.primary,
               ),
             )
           : Row(

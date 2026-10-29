@@ -168,7 +168,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
         for (final (m, _) in totals) Formatters.monthYear(m).substring(0, 3),
       ],
       series: [
-        ChartSeries('Spent', AppColors.expense, [
+        ChartSeries('Spent', context.colors.expense, [
           for (final (_, spent) in totals) spent,
         ]),
       ],
@@ -339,7 +339,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
       if (cats.exceedsOverall)
         _Note(
           icon: Icons.warning_amber_rounded,
-          color: AppColors.warning,
+          color: context.colors.warning,
           text: 'Category limits add up to '
               '${Formatters.currency(cats.totalLimits)}, more than the '
               'overall budget of ${Formatters.currency(cats.overallBudget!)}. '
@@ -465,8 +465,8 @@ class _StatTile extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
+              style: TextStyle(
+                color: context.colors.textSecondary,
                 fontSize: 12,
               ),
             ),
@@ -476,9 +476,9 @@ class _StatTile extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Text(
                 signed && amount > 0 ? '+$text' : text,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                  color: context.colors.textPrimary,
                 ),
               ),
             ),
@@ -552,7 +552,7 @@ class _BudgetDialogState extends State<_BudgetDialog> {
           TextButton(
             onPressed: () =>
                 Navigator.of(context).pop(const _BudgetDialogResult(null)),
-            style: TextButton.styleFrom(foregroundColor: AppColors.expense),
+            style: TextButton.styleFrom(foregroundColor: context.colors.expense),
             child: const Text('Remove'),
           ),
         TextButton(
@@ -672,7 +672,7 @@ class _CategoryLimitDialogState extends State<_CategoryLimitDialog> {
           TextButton(
             onPressed: () => Navigator.of(context)
                 .pop(_LimitResult(widget.categoryId!, null)),
-            style: TextButton.styleFrom(foregroundColor: AppColors.expense),
+            style: TextButton.styleFrom(foregroundColor: context.colors.expense),
             child: const Text('Remove'),
           ),
         TextButton(
@@ -696,7 +696,7 @@ class _Note extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? AppColors.textSecondary;
+    final c = color ?? context.colors.textSecondary;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(

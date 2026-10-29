@@ -109,10 +109,10 @@ class _PrivacyCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: AppColors.background,
+    return ColoredBox(
+      color: context.colors.background,
       child: Center(
-        child: Icon(Icons.lock_rounded, size: 48, color: AppColors.primary),
+        child: Icon(Icons.lock_rounded, size: 48, color: context.colors.primary),
       ),
     );
   }

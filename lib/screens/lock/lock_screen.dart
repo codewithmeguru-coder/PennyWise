@@ -135,7 +135,7 @@ class _LockScreenState extends State<LockScreen> {
     final canType = wait == null && !_busy && !_unreadable;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
@@ -164,24 +164,28 @@ class _LockScreenState extends State<LockScreen> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const CircleAvatar(
+        CircleAvatar(
           radius: 32,
-          backgroundColor: AppColors.primary,
-          child: Icon(Icons.lock_rounded, color: Colors.white, size: 32),
+          backgroundColor: context.colors.primary,
+          child: Icon(
+            Icons.lock_rounded,
+            color: context.colors.onPrimary,
+            size: 32,
+          ),
         ),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'PennyWise is locked',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: context.colors.textPrimary,
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Enter your PIN to continue',
-          style: TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: context.colors.textSecondary),
         ),
         const SizedBox(height: 24),
         PinDots(length: _pin.length, error: message != null),
@@ -193,7 +197,7 @@ class _LockScreenState extends State<LockScreen> {
                 : Text(
                     message,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.expense),
+                    style: TextStyle(color: context.colors.expense),
                   ),
           ),
         ),
@@ -206,7 +210,7 @@ class _LockScreenState extends State<LockScreen> {
                   tooltip: 'Use fingerprint',
                   onPressed: _busy ? null : _biometrics,
                   icon: const Icon(Icons.fingerprint_rounded, size: 32),
-                  color: AppColors.primary,
+                  color: context.colors.primary,
                 )
               : null,
         ),
@@ -240,38 +244,38 @@ class _LockScreenState extends State<LockScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Icon(Icons.logout_rounded, size: 40, color: AppColors.primary),
+        Icon(Icons.logout_rounded, size: 40, color: context.colors.primary),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'Sign out and reset App Lock?',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: context.colors.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'You\'ll be signed out of PennyWise, and App Lock will be turned off '
           'on this phone. Your transactions, budgets and profile stay safe in '
           'your account.\n\nSign in again with Google or your email to get '
           'back in, then set a new PIN in Settings.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: context.colors.textSecondary),
         ),
         if (_message != null) ...[
           const SizedBox(height: 12),
           Text(
             _message!,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.expense),
+            style: TextStyle(color: context.colors.expense),
           ),
         ],
         const SizedBox(height: 24),
         FilledButton(
           onPressed: _busy ? null : _signOut,
-          style: FilledButton.styleFrom(backgroundColor: AppColors.expense),
+          style: FilledButton.styleFrom(backgroundColor: context.colors.expense),
           child: const Text('Sign out'),
         ),
         const SizedBox(height: 8),

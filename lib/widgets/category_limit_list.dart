@@ -63,9 +63,9 @@ class _LimitRow extends StatelessWidget {
     final percent = '${(row.share * 100).round()}%';
     final status = row.status;
     final color = switch (status) {
-      BudgetStatus.over => AppColors.expense,
-      BudgetStatus.nearLimit => AppColors.warning,
-      _ => AppColors.primary,
+      BudgetStatus.over => context.colors.expense,
+      BudgetStatus.nearLimit => context.colors.warning,
+      _ => context.colors.primary,
     };
 
     final String? limitText;
@@ -110,17 +110,17 @@ class _LimitRow extends StatelessWidget {
                         Expanded(
                           child: Text(
                             category.name,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
+                              color: context.colors.textPrimary,
                             ),
                           ),
                         ),
                         Text(
                           amount,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
+                            color: context.colors.textPrimary,
                           ),
                         ),
                         SizedBox(
@@ -128,8 +128,8 @@ class _LimitRow extends StatelessWidget {
                           child: Text(
                             percent,
                             textAlign: TextAlign.right,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
+                            style: TextStyle(
+                              color: context.colors.textSecondary,
                               fontSize: 13,
                             ),
                           ),
@@ -153,8 +153,8 @@ class _LimitRow extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           color: status == BudgetStatus.over
-                              ? AppColors.expense
-                              : AppColors.textSecondary,
+                              ? context.colors.expense
+                              : context.colors.textSecondary,
                         ),
                       ),
                     ] else
@@ -166,8 +166,8 @@ class _LimitRow extends StatelessWidget {
                               alignment: Alignment.centerLeft,
                               child: Container(
                                 height: 10,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.primary,
+                                decoration: BoxDecoration(
+                                  color: context.colors.primary,
                                   borderRadius: BorderRadius.horizontal(
                                     right: Radius.circular(4),
                                   ),
@@ -177,12 +177,12 @@ class _LimitRow extends StatelessWidget {
                           ),
                           if (onEdit != null) ...[
                             const SizedBox(width: 8),
-                            const Text(
+                            Text(
                               'Set limit',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.primary,
+                                color: context.colors.primary,
                               ),
                             ),
                           ],

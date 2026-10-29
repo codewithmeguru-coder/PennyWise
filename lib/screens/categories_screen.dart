@@ -40,7 +40,7 @@ class CategoriesScreen extends StatelessWidget {
           onPressed: registry.canEdit ? () => _open(context) : null,
           backgroundColor: registry.canEdit
               ? null
-              : AppColors.textSecondary.withValues(alpha: 0.3),
+              : context.colors.textSecondary.withValues(alpha: 0.3),
           icon: const Icon(Icons.add_rounded),
           label: const Text('Add category'),
         ),
@@ -59,7 +59,7 @@ class CategoriesScreen extends StatelessWidget {
                 ),
               if (registry.error != null)
                 Card(
-                  color: AppColors.warning.withValues(alpha: 0.1),
+                  color: context.colors.warning.withValues(alpha: 0.1),
                   child: ListTile(
                     leading: const Icon(Icons.cloud_off_rounded),
                     title: const Text('Couldn\'t load your categories'),
@@ -125,7 +125,7 @@ class CategoriesScreen extends StatelessWidget {
             type == TransactionType.expense
                 ? 'None yet. Tap "Add category" to add one.'
                 : 'None yet.',
-            style: const TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.colors.textSecondary),
           ),
         )
       else
@@ -137,15 +137,15 @@ class CategoriesScreen extends StatelessWidget {
                   leading: Icon(
                     CategoryIcons.of(c.icon),
                     color: c.active
-                        ? AppColors.primary
-                        : AppColors.textSecondary,
+                        ? context.colors.primary
+                        : context.colors.textSecondary,
                   ),
                   title: Text(c.name),
                   subtitle: c.active ? null : const Text('Inactive'),
                   trailing: Icon(
                     Icons.edit_outlined,
                     size: 20,
-                    color: registry.canEdit ? null : AppColors.divider,
+                    color: registry.canEdit ? null : context.colors.divider,
                   ),
                   // Renaming needs the full list too (see canEdit).
                   onTap: registry.canEdit ? () => _open(context, c) : null,
@@ -261,7 +261,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
               else
                 Text(
                   '${existing.type.label} category',
-                  style: const TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: context.colors.textSecondary),
                 ),
               const SizedBox(height: 12),
               const Text('Icon'),
@@ -279,7 +279,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                       icon: Icon(icon),
                       style: IconButton.styleFrom(
                         backgroundColor: key == _icon
-                            ? AppColors.primary.withValues(alpha: 0.15)
+                            ? context.colors.primary.withValues(alpha: 0.15)
                             : null,
                       ),
                     ),
@@ -294,15 +294,15 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                             'reports and limits still count them.'
                       : 'It\'s off: past transactions keep it, but it isn\'t '
                             'offered for new ones.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
                 ),
               ],
               if (_error != null) ...[
                 const SizedBox(height: 8),
-                Text(_error!, style: const TextStyle(color: AppColors.expense)),
+                Text(_error!, style: TextStyle(color: context.colors.expense)),
               ],
             ],
           ),

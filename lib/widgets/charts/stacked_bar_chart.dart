@@ -40,9 +40,9 @@ class StackedBarChart extends StatelessWidget {
             child: BarChart(
               BarChartData(
                 maxY: max <= 0 ? 1 : (max / step).ceil() * step,
-                gridData: ChartStyle.grid,
+                gridData: ChartStyle.grid(context),
                 borderData: ChartStyle.border,
-                barTouchData: ChartStyle.touch(
+                barTouchData: ChartStyle.touch(context, 
                   (g, _) => ChartStyle.money(labels[g], _total(g)),
                 ),
                 titlesData: FlTitlesData(
@@ -57,7 +57,7 @@ class StackedBarChart extends StatelessWidget {
                         meta: meta,
                         child: Text(
                           ChartStyle.compact(value),
-                          style: ChartStyle.axisLabel,
+                          style: ChartStyle.axisLabel(context),
                         ),
                       ),
                     ),
@@ -70,7 +70,7 @@ class StackedBarChart extends StatelessWidget {
                         meta: meta,
                         child: Text(
                           labels[value.toInt()],
-                          style: ChartStyle.axisLabel,
+                          style: ChartStyle.axisLabel(context),
                         ),
                       ),
                     ),
@@ -120,7 +120,7 @@ class StackedBarChart extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(series[i].name, style: ChartStyle.axisLabel),
+                        Text(series[i].name, style: ChartStyle.axisLabel(context)),
                       ],
                     ),
                   ),

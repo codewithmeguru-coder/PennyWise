@@ -167,7 +167,7 @@ class _MoveFixScreenState extends State<MoveFixScreen> {
     '${Formatters.currency(c.record.amount)} · ${c.record.type} → '
     '${c.kind == MoveKind.cashWithdrawal ? 'SIM ${c.fromSim + 1} M-Pesa → Cash' : 'SIM ${c.fromSim + 1} → SIM ${c.toSim! + 1} M-Pesa'}'
     '${c.addFee != null ? ' · fee ${Formatters.currency(c.addFee!)}' : ''}',
-    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+    style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
   );
 
   @override
@@ -183,12 +183,12 @@ class _MoveFixScreenState extends State<MoveFixScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const Text(
+                Text(
                   'Money you moved between your own SIMs, or withdrew '
                   'as cash, saved as spending or income. Found by your '
                   'phone\'s own messages: sent on one SIM and received '
                   'on the other. Nothing has been changed yet.',
-                  style: TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: context.colors.textSecondary),
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -206,18 +206,18 @@ class _MoveFixScreenState extends State<MoveFixScreen> {
                     key: const Key('move-blocked'),
                     style: label,
                   ),
-                  const Text(
+                  Text(
                     'Set your Cash starting balance first (Accounts › '
                     'Cash), so cash you already spent doesn\'t show as '
                     'held today.',
-                    style: TextStyle(color: AppColors.warning),
+                    style: TextStyle(color: context.colors.warning),
                   ),
                   for (final c in p.blocked) _row(c),
                 ],
                 for (final e in p.skipped.entries)
                   Text(
                     'Left alone, ${e.key.toLowerCase()}: ${e.value}',
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: context.colors.textSecondary),
                   ),
                 if (p.changes.isNotEmpty) ...[
                   const SizedBox(height: 12),

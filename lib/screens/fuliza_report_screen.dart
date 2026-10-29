@@ -133,7 +133,17 @@ class _FulizaReportScreenState extends State<FulizaReportScreen> {
           _Summary(report: report),
           _Warnings(report: report),
           const SectionHeader(title: 'Fees by month'),
-          _card(_monthlyChart(report)),
+          _card(
+            Column(
+              children: [
+                _monthlyChart(report),
+                if (report.monthlyFees.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _MonthlyFeeTable(report: report, sim: _sim),
+                ],
+              ],
+            ),
+          ),
           if (_sim == FulizaSimFilter.all) ...[
             const SectionHeader(title: 'Fees by SIM'),
             _card(_simChart(report)),
@@ -245,7 +255,7 @@ class _FulizaReportScreenState extends State<FulizaReportScreen> {
     final fees = report.monthlyFees;
     final months = fees.keys.toList()..sort();
     if (months.isEmpty) {
-      return const Text('No fees in this period.', style: ChartStyle.axisLabel);
+      return Text('No fees in this period.', style: ChartStyle.axisLabel(context));
     }
     final slots = _sim == FulizaSimFilter.all
         ? ({for (final m in fees.values) ...m.keys}.toList()
@@ -255,7 +265,7 @@ class _FulizaReportScreenState extends State<FulizaReportScreen> {
       labels: [for (final m in months) _shortMonth(m)],
       series: [
         for (final slot in slots)
-          ChartSeries(_simName(slot), ChartStyle.sim(slot), [
+          ChartSeries(_simName(slot), ChartStyle.sim(context, slot), [
             for (final m in months) fees[m]![slot] ?? 0,
           ]),
       ],
@@ -275,7 +285,7 @@ class _FulizaReportScreenState extends State<FulizaReportScreen> {
       labels: const ['Fees'],
       series: [
         for (final slot in slots)
-          ChartSeries(_simName(slot), ChartStyle.sim(slot), [
+          ChartSeries(_simName(slot), ChartStyle.sim(context, slot), [
             bySim[slot]!.fees,
           ]),
       ],
@@ -291,6 +301,77 @@ class _FulizaReportScreenState extends State<FulizaReportScreen> {
 }
 
 String _simName(int? slot) => slot == null ? 'Unknown SIM' : 'SIM ${slot + 1}';
+
+/// The numbers behind "Fees by month", newest month first: one column per
+/// SIM and a total when more than one SIM had fees.
+class _MonthlyFeeTable extends StatelessWidget {
+  const _MonthlyFeeTable({required this.report, required this.sim});
+
+  final FulizaReport report;
+  final FulizaSimFilter sim;
+
+  @override
+  Widget build(BuildContext context) {
+    final fees = report.monthlyFees;
+    final months = fees.keys.toList()..sort((a, b) => b.compareTo(a));
+    final slots = sim == FulizaSimFilter.all
+        ? ({for (final m in fees.values) ...m.keys}.toList()
+            ..sort((a, b) => (a ?? 9).compareTo(b ?? 9)))
+        : [sim.slot];
+    final showTotal = slots.length > 1;
+    final head = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: context.colors.textSecondary,
+    );
+    Widget cell(String text, {TextStyle? style, bool left = false}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Text(
+        text,
+        textAlign: left ? TextAlign.left : TextAlign.right,
+        style: style ?? const TextStyle(fontSize: 13),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Table(
+        key: const Key('fuliza-month-table'),
+        columnWidths: const {0: FlexColumnWidth(1.2)},
+        border: TableBorder(
+          horizontalInside: BorderSide(color: context.colors.divider),
+        ),
+        children: [
+          TableRow(
+            children: [
+              cell('Month', style: head, left: true),
+              for (final s in slots)
+                cell(slots.length == 1 ? 'Fees' : _simName(s), style: head),
+              if (showTotal) cell('Total', style: head),
+            ],
+          ),
+          for (final m in months)
+            TableRow(
+              children: [
+                cell(Formatters.monthYear(m), left: true),
+                for (final s in slots)
+                  cell(Formatters.currency(fees[m]![s] ?? 0)),
+                if (showTotal)
+                  cell(
+                    Formatters.currency(
+                      fees[m]!.values.fold(0.0, (a, b) => a + b),
+                    ),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
 
 class _Summary extends StatelessWidget {
   const _Summary({required this.report});
@@ -322,7 +403,7 @@ class _Summary extends StatelessWidget {
             Formatters.currency(t.fees),
             '${t.loans} ${t.loans == 1 ? 'loan' : 'loans'}'
                 '${t.loans == 0 ? '' : ' · avg ${Formatters.currency(t.fees / t.loans)}'}',
-            color: AppColors.expense,
+            color: context.colors.expense,
           ),
           _Stat(
             'Borrowed',
@@ -341,7 +422,7 @@ class _Summary extends StatelessWidget {
                 ? 'No Fuliza message states it'
                 : '${allConfirmed ? 'Stated' : 'Estimated'} · '
                       '${Formatters.shortDate(latest!)}',
-            color: AppColors.warning,
+            color: context.colors.warning,
           ),
         ],
       ),
@@ -367,9 +448,9 @@ class _Stat extends StatelessWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
               ),
             ),
             const SizedBox(height: 4),
@@ -381,7 +462,7 @@ class _Stat extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: color ?? AppColors.textPrimary,
+                  color: color ?? context.colors.textPrimary,
                 ),
               ),
             ),
@@ -390,9 +471,9 @@ class _Stat extends StatelessWidget {
               detail,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
               ),
             ),
           ],
@@ -426,7 +507,7 @@ class _Warnings extends StatelessWidget {
     ];
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      color: AppColors.warning.withValues(alpha: 0.08),
+      color: context.colors.warning.withValues(alpha: 0.08),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -438,10 +519,10 @@ class _Warnings extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.info_outline_rounded,
                       size: 16,
-                      color: AppColors.warning,
+                      color: context.colors.warning,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -492,13 +573,13 @@ class _LedgerTile extends StatelessWidget {
       dense: true,
       leading: CircleAvatar(
         radius: 14,
-        backgroundColor: ChartStyle.sim(e.simSlot).withValues(alpha: 0.15),
+        backgroundColor: ChartStyle.sim(context, e.simSlot).withValues(alpha: 0.15),
         child: Text(
           e.simSlot == null ? '?' : '${e.simSlot! + 1}',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: ChartStyle.sim(e.simSlot),
+            color: ChartStyle.sim(context, e.simSlot),
           ),
         ),
       ),

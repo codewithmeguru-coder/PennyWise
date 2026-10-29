@@ -31,7 +31,7 @@ class SpendingVsBudgetChart extends StatelessWidget {
     final step = ChartStyle.interval(top);
     final spent = cumulative.isEmpty ? 0.0 : cumulative.last;
     final over = budget != null && spent > budget!;
-    final lineColor = over ? AppColors.expense : AppColors.primary;
+    final lineColor = over ? context.colors.expense : context.colors.primary;
     return Semantics(
       label:
           'Spent ${Formatters.currency(spent)} so far'
@@ -47,16 +47,19 @@ class SpendingVsBudgetChart extends StatelessWidget {
                 maxX: daysInMonth.toDouble(),
                 minY: 0,
                 maxY: top <= 0 ? 1 : (top / step).ceil() * step,
-                gridData: ChartStyle.grid,
+                gridData: ChartStyle.grid(context),
                 borderData: ChartStyle.border,
                 lineTouchData: LineTouchData(
                   touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (_) => AppColors.textPrimary,
+                    getTooltipColor: (_) => context.colors.textPrimary,
                     getTooltipItems: (spots) => [
                       for (final s in spots)
                         LineTooltipItem(
                           'Day ${s.x.toInt()}\n${Formatters.currency(s.y)}',
-                          const TextStyle(color: Colors.white, fontSize: 12),
+                          TextStyle(
+                            color: context.colors.surface,
+                            fontSize: 12,
+                          ),
                         ),
                     ],
                   ),
@@ -66,7 +69,7 @@ class SpendingVsBudgetChart extends StatelessWidget {
                     if (budget != null)
                       HorizontalLine(
                         y: budget!,
-                        color: AppColors.warning,
+                        color: context.colors.warning,
                         strokeWidth: 2,
                         dashArray: [6, 4],
                       ),
@@ -84,7 +87,7 @@ class SpendingVsBudgetChart extends StatelessWidget {
                         meta: meta,
                         child: Text(
                           ChartStyle.compact(value),
-                          style: ChartStyle.axisLabel,
+                          style: ChartStyle.axisLabel(context),
                         ),
                       ),
                     ),
@@ -98,7 +101,7 @@ class SpendingVsBudgetChart extends StatelessWidget {
                         meta: meta,
                         child: Text(
                           '${value.toInt()}',
-                          style: ChartStyle.axisLabel,
+                          style: ChartStyle.axisLabel(context),
                         ),
                       ),
                     ),
@@ -130,7 +133,7 @@ class SpendingVsBudgetChart extends StatelessWidget {
             children: [
               _Key(color: lineColor, label: 'Spent'),
               if (budget != null)
-                const _Key(color: AppColors.warning, label: 'Budget'),
+                _Key(color: context.colors.warning, label: 'Budget'),
             ],
           ),
         ],
@@ -152,7 +155,7 @@ class _Key extends StatelessWidget {
       children: [
         Container(width: 14, height: 3, color: color),
         const SizedBox(width: 6),
-        Text(label, style: ChartStyle.axisLabel),
+        Text(label, style: ChartStyle.axisLabel(context)),
       ],
     );
   }

@@ -68,9 +68,9 @@ class CategoryDonut extends StatelessWidget {
     ];
   }
 
-  static Color colorFor(int index, DonutSlice slice) => slice.categoryId == null
-      ? AppColors.textSecondary
-      : ChartStyle.series(index);
+  static Color colorFor(BuildContext context, int index, DonutSlice slice) => slice.categoryId == null
+      ? context.colors.textSecondary
+      : ChartStyle.series(context, index);
 
   @override
   Widget build(BuildContext context) {
@@ -87,8 +87,8 @@ class CategoryDonut extends StatelessWidget {
         // text, the legend goes under the chart.
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final donut = _donut(parts, total);
-            final legend = _legend(parts);
+            final donut = _donut(context, parts, total);
+            final legend = _legend(context, parts);
             if (constraints.maxWidth < 360) {
               return Column(
                 children: [donut, const SizedBox(height: 12), legend],
@@ -107,7 +107,7 @@ class CategoryDonut extends StatelessWidget {
     );
   }
 
-  Widget _donut(List<DonutSlice> parts, double total) => SizedBox(
+  Widget _donut(BuildContext context, List<DonutSlice> parts, double total) => SizedBox(
     width: 120,
     height: 120,
     child: Stack(
@@ -123,7 +123,7 @@ class CategoryDonut extends StatelessWidget {
               for (var i = 0; i < parts.length; i++)
                 PieChartSectionData(
                   value: parts[i].amount,
-                  color: colorFor(i, parts[i]),
+                  color: colorFor(context, i, parts[i]),
                   radius: 20,
                   showTitle: false,
                 ),
@@ -136,9 +136,9 @@ class CategoryDonut extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             child: Text(
               ChartStyle.compact(total),
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: context.colors.textPrimary,
               ),
             ),
           ),
@@ -147,7 +147,7 @@ class CategoryDonut extends StatelessWidget {
     ),
   );
 
-  Widget _legend(List<DonutSlice> parts) => Column(
+  Widget _legend(BuildContext context, List<DonutSlice> parts) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       for (var i = 0; i < parts.length; i++)
@@ -159,7 +159,7 @@ class CategoryDonut extends StatelessWidget {
                 width: 10,
                 height: 10,
                 decoration: BoxDecoration(
-                  color: colorFor(i, parts[i]),
+                  color: colorFor(context, i, parts[i]),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -175,9 +175,9 @@ class CategoryDonut extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 Formatters.currency(parts[i].amount),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                 ),
               ),
             ],

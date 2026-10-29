@@ -33,10 +33,10 @@ class MonthSwitcher extends StatelessWidget {
               child: Text(
                 Formatters.monthYear(selection.value),
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                  color: context.colors.textPrimary,
                 ),
               ),
             ),

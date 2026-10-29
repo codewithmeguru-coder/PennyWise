@@ -39,20 +39,20 @@ class AccountCards extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
                   Icon(Icons.account_balance_wallet_outlined,
-                      color: AppColors.primary),
+                      color: context.colors.primary),
                   SizedBox(width: 8),
                   Text('Set up your accounts',
                       style: TextStyle(fontWeight: FontWeight.w600)),
                 ],
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'SIM 1 and SIM 2 M-Pesa, each with its own Ziidi and Fuliza, '
                 'and Cash. Add banks yourself.',
-                style: TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
               const SizedBox(height: 8),
               Align(
@@ -141,7 +141,7 @@ class _AccountCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(_icon, size: 18, color: AppColors.primary),
+                    Icon(_icon, size: 18, color: context.colors.primary),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -163,8 +163,8 @@ class _AccountCard extends StatelessWidget {
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                       color: isLoan && amount > 0
-                          ? AppColors.expense
-                          : AppColors.textPrimary,
+                          ? context.colors.expense
+                          : context.colors.textPrimary,
                     ),
                   ),
                 ),
@@ -175,8 +175,8 @@ class _AccountCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     color: b.differs || (isLoan && amount < 0)
-                        ? AppColors.warning
-                        : AppColors.textSecondary,
+                        ? context.colors.warning
+                        : context.colors.textSecondary,
                   ),
                 ),
               ],
@@ -199,7 +199,7 @@ class _UnassignedCard extends StatelessWidget {
       width: 172,
       child: Card(
         margin: const EdgeInsets.only(right: 10),
-        color: AppColors.warning.withValues(alpha: 0.08),
+        color: context.colors.warning.withValues(alpha: 0.08),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -223,11 +223,11 @@ class _UnassignedCard extends StatelessWidget {
                       fontSize: 18, fontWeight: FontWeight.w700),
                 ),
               ),
-              const Text(
+              Text(
                 'M-Pesa transactions',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
               ),
             ],
           ),
@@ -259,7 +259,7 @@ class _ManageCard extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: AppColors.primary),
+              Icon(icon, color: context.colors.primary),
               const SizedBox(height: 6),
               Text(label,
                   textAlign: TextAlign.center,

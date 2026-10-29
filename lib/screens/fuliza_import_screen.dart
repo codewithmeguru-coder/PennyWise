@@ -209,7 +209,7 @@ class _FulizaImportScreenState extends State<FulizaImportScreen> {
     final secondary = Theme.of(context)
         .textTheme
         .bodyMedium
-        ?.copyWith(color: AppColors.textSecondary);
+        ?.copyWith(color: context.colors.textSecondary);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [

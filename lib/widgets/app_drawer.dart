@@ -48,7 +48,7 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       child: Column(
         children: [
           _ProfileHeader(user: user, avatar: avatar),
@@ -112,7 +112,7 @@ class AppDrawer extends StatelessWidget {
               child: _DrawerItem(
                 icon: Icons.logout_rounded,
                 label: 'Log out',
-                color: AppColors.expense,
+                color: context.colors.expense,
                 onTap: () => _closeThen(context, onSignOut),
               ),
             ),
@@ -136,9 +136,9 @@ class _ProfileHeader extends StatelessWidget {
     final name = user.displayName?.trim() ?? '';
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryDark],
+          colors: [context.colors.heroStart, context.colors.primaryDark],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -207,13 +207,13 @@ class _DrawerItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final foreground =
-        color ?? (selected ? AppColors.primary : AppColors.textPrimary);
+        color ?? (selected ? context.colors.primary : context.colors.textPrimary);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: ListTile(
         onTap: onTap,
         selected: selected,
-        selectedTileColor: AppColors.primary.withValues(alpha: 0.12),
+        selectedTileColor: context.colors.primary.withValues(alpha: 0.12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         leading: Icon(icon, color: foreground),
         title: Text(
@@ -238,7 +238,7 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.primary : AppColors.textSecondary;
+    final color = active ? context.colors.primary : context.colors.textSecondary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(

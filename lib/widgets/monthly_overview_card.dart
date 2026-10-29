@@ -92,7 +92,7 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Monthly overview',
                     maxLines: 1,
@@ -100,7 +100,7 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                      color: context.colors.textPrimary,
                     ),
                   ),
                 ),
@@ -191,14 +191,14 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
               child: _Figure(
                 label: 'Income',
                 amount: summary.income,
-                color: AppColors.income,
+                color: context.colors.income,
               ),
             ),
             Expanded(
               child: _Figure(
                 label: 'Expenses',
                 amount: summary.expenses,
-                color: AppColors.expense,
+                color: context.colors.expense,
               ),
             ),
             Expanded(
@@ -208,10 +208,10 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
         ),
         const SizedBox(height: 4),
         // What "Expenses" means, by the Ledger's rules.
-        const Text(
+        Text(
           MonthlyOverviewCard.expensesCaption,
           key: Key('overview-expenses-caption'),
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
         ),
         const SizedBox(height: 12),
         if (budget.hasError)
@@ -243,7 +243,7 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
             onTap: widget.onOpenBudgets,
             child: _Notice(
               icon: Icons.warning_amber_rounded,
-              color: cats.overCount > 0 ? AppColors.expense : AppColors.warning,
+              color: cats.overCount > 0 ? context.colors.expense : context.colors.warning,
               text: limitsLine,
             ),
           ),
@@ -262,7 +262,7 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
                   ? 'No transactions in $monthName'
                   : 'No spending in $monthName',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
           ),
       ],
@@ -293,7 +293,7 @@ class _Figure extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
         ),
         const SizedBox(height: 2),
         FittedBox(
@@ -303,7 +303,7 @@ class _Figure extends StatelessWidget {
             signed && amount > 0 ? '+$text' : text,
             style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: color ?? AppColors.textPrimary,
+              color: color ?? context.colors.textPrimary,
             ),
           ),
         ),
@@ -322,9 +322,9 @@ class _BudgetLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final remaining = summary.remaining!;
     final color = switch (summary.status!) {
-      BudgetStatus.onTrack => AppColors.primary,
-      BudgetStatus.nearLimit => AppColors.warning,
-      BudgetStatus.over => AppColors.expense,
+      BudgetStatus.onTrack => context.colors.primary,
+      BudgetStatus.nearLimit => context.colors.warning,
+      BudgetStatus.over => context.colors.expense,
     };
     final percentUsed = (summary.usedFraction! * 100).round();
     return Column(
@@ -337,9 +337,9 @@ class _BudgetLine extends StatelessWidget {
               : '${Formatters.currency(remaining)} left of '
                     '${Formatters.currency(summary.budget!)} · '
                     '$percentUsed% used',
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+            color: context.colors.textPrimary,
           ),
         ),
         const SizedBox(height: 6),
@@ -363,16 +363,19 @@ class _Notice extends StatelessWidget {
     required this.icon,
     required this.text,
     this.action,
-    this.color = AppColors.textSecondary,
+    this.color,
   });
 
   final IconData icon;
   final String text;
   final Widget? action;
-  final Color color;
+
+  /// Secondary text colour when null.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final color = this.color ?? context.colors.textSecondary;
     return Row(
       children: [
         Icon(icon, size: 18, color: color),

@@ -114,13 +114,13 @@ class AppLockSettingsScreen extends StatelessWidget {
                     enabled: false,
                   ),
                 const Divider(),
-                const Padding(
+                Padding(
                   padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: Text(
                     'Lock after leaving the app',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      color: context.colors.textPrimary,
                     ),
                   ),
                 ),
@@ -348,10 +348,10 @@ class _PinScaffold extends StatelessWidget {
               Text(
                 heading,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                  color: context.colors.textPrimary,
                 ),
               ),
               if (hint.isNotEmpty) ...[
@@ -359,7 +359,7 @@ class _PinScaffold extends StatelessWidget {
                 Text(
                   hint,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: context.colors.textSecondary),
                 ),
               ],
               const SizedBox(height: 24),
@@ -372,7 +372,7 @@ class _PinScaffold extends StatelessWidget {
                       : Text(
                           error!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: AppColors.expense),
+                          style: TextStyle(color: context.colors.expense),
                         ),
                 ),
               ),

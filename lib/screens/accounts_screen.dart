@@ -135,13 +135,13 @@ class AccountsScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.only(bottom: 96),
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: Text(
                   'M-Pesa messages go to the account of the SIM that '
                   'received them. SIM 1 and SIM 2 are always kept separate. '
                   'Only add accounts that are yours.',
-                  style: TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: context.colors.textSecondary),
                 ),
               ),
               for (final a in list)
@@ -342,7 +342,7 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Text(
                   [existing!.kind.label, ?existing.simLabel].join(' · '),
-                  style: const TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: context.colors.textSecondary),
                 ),
               ),
             TextFormField(
@@ -478,14 +478,14 @@ class _StartOverScreenState extends State<StartOverScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text(
+            Text(
               'Type what each account holds right now (check M-Pesa, Ziidi '
               'and your bank), or use the balance from its latest SMS. For '
               'Fuliza, type what you owe, not your limit. From then on the '
               'balances count only newer transactions; older ones stay in '
               'your history and reports. Leave a box empty to skip: that '
               'account stays marked as not verified.',
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
             const SizedBox(height: 8),
             for (final a in widget.accounts)
@@ -520,8 +520,8 @@ class _StartOverScreenState extends State<StartOverScreen> {
                     child: _fromSms.containsKey(a.id)
                         ? Text(
                             'As of the SMS of ${Formatters.shortDate(s.at)}',
-                            style: const TextStyle(
-                                color: AppColors.textSecondary, fontSize: 12),
+                            style: TextStyle(
+                                color: context.colors.textSecondary, fontSize: 12),
                           )
                         : ActionChip(
                             avatar: const Icon(Icons.sms_outlined, size: 16),

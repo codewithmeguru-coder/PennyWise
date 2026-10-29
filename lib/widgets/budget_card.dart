@@ -51,16 +51,16 @@ class _NoBudget extends StatelessWidget {
       children: [
         Text(
           'No budget for ${Formatters.monthYear(month)}',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: context.colors.textPrimary,
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Set a spending limit to see how much you have left.',
-          style: TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: context.colors.textSecondary),
         ),
         const SizedBox(height: 16),
         FilledButton.icon(
@@ -84,11 +84,11 @@ class _BudgetDetails extends StatelessWidget {
     final remaining = summary.remaining!;
     final (color, icon, label) = switch (summary.status!) {
       BudgetStatus.onTrack =>
-        (AppColors.primary, Icons.check_circle_rounded, 'On track'),
+        (context.colors.primary, Icons.check_circle_rounded, 'On track'),
       BudgetStatus.nearLimit =>
-        (AppColors.warning, Icons.warning_amber_rounded, 'Near limit'),
+        (context.colors.warning, Icons.warning_amber_rounded, 'Near limit'),
       BudgetStatus.over =>
-        (AppColors.expense, Icons.error_rounded, 'Over budget'),
+        (context.colors.expense, Icons.error_rounded, 'Over budget'),
     };
     final percentUsed = (summary.usedFraction! * 100).round();
 
@@ -100,7 +100,7 @@ class _BudgetDetails extends StatelessWidget {
             Expanded(
               child: Text(
                 remaining < 0 ? 'Over budget by' : 'Remaining',
-                style: const TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
             ),
             TextButton.icon(
@@ -112,10 +112,10 @@ class _BudgetDetails extends StatelessWidget {
         ),
         Text(
           Formatters.currency(remaining.abs()),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 30,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: context.colors.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
@@ -140,9 +140,9 @@ class _BudgetDetails extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: context.colors.textPrimary,
               ),
             ),
             const SizedBox(width: 8),
@@ -151,8 +151,8 @@ class _BudgetDetails extends StatelessWidget {
                 '${Formatters.currency(summary.expenses)} of '
                 '${Formatters.currency(summary.budget!)} · $percentUsed%',
                 textAlign: TextAlign.right,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: context.colors.textSecondary,
                   fontSize: 13,
                 ),
               ),
@@ -174,12 +174,12 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: AppColors.textSecondary),
+        Icon(icon, color: context.colors.textSecondary),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.colors.textSecondary),
           ),
         ),
       ],

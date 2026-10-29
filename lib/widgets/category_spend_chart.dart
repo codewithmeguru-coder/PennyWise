@@ -52,8 +52,8 @@ class _CategoryBar extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-              child: Icon(category.icon, size: 18, color: AppColors.primary),
+              backgroundColor: context.colors.primary.withValues(alpha: 0.1),
+              child: Icon(category.icon, size: 18, color: context.colors.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -65,17 +65,17 @@ class _CategoryBar extends StatelessWidget {
                       Expanded(
                         child: Text(
                           category.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
+                            color: context.colors.textPrimary,
                           ),
                         ),
                       ),
                       Text(
                         amount,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                          color: context.colors.textPrimary,
                         ),
                       ),
                       SizedBox(
@@ -83,8 +83,8 @@ class _CategoryBar extends StatelessWidget {
                         child: Text(
                           percent,
                           textAlign: TextAlign.right,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
+                          style: TextStyle(
+                            color: context.colors.textSecondary,
                             fontSize: 13,
                           ),
                         ),
@@ -99,8 +99,8 @@ class _CategoryBar extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     child: Container(
                       height: 10,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
+                      decoration: BoxDecoration(
+                        color: context.colors.primary,
                         borderRadius: BorderRadius.horizontal(
                           right: Radius.circular(4),
                         ),
