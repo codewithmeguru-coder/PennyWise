@@ -27,7 +27,7 @@ final when = DateTime(2026, 10, 31, 10, 53);
 
 class FixedRates implements ExchangeRates {
   FixedRates(this.rate);
-  final double? rate;
+  double? rate;
   final asked = <String>[];
 
   @override
@@ -132,6 +132,51 @@ void main() {
       await s.handle(RawSms(sender: 'Equity Bank', body: usdCard, date: when));
       expect(saved, isEmpty);
     });
+  });
+
+  test('held while offline, added on the next open once the rate is known',
+      () async {
+    final now = DateTime.now();
+    final card = RawSms(
+      sender: 'Equity Bank',
+      body: usdCard,
+      date: now.subtract(const Duration(hours: 2)),
+    );
+    final gateway = FakeSmsGateway(permissionGranted: true)..inbox.add(card);
+    final acc = AccountStore(
+      FakeAccountRepository([
+        ...MoneyAccount.starterSet(),
+        const MoneyAccount(
+          id: 'equity',
+          name: 'Equity',
+          kind: AccountKind.bank,
+          provider: AccountProvider.equity,
+        ),
+      ]),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final rates = FixedRates(null);
+    final saved = <String>[];
+    final s = SmsImportService(
+      gateway: gateway,
+      // Last checked after the card arrived: the usual scan skips it.
+      settings: FakeSmsSettings(enabled: true, last: now),
+      save: (t, key) async {
+        saved.add(key);
+        return true;
+      },
+      accounts: () => acc,
+      rates: rates,
+    );
+    await s.start();
+    await s.handle(card); // read while offline
+    expect(saved, isEmpty);
+
+    rates.rate = 129.85;
+    await s.onAppResumed();
+    expect(saved, ['equity_CARD123456789012']);
+    await s.onAppResumed(); // and only once
+    expect(saved, hasLength(1));
   });
 
   group('checking', () {

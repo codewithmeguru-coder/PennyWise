@@ -527,6 +527,41 @@ class SmsImportService extends ChangeNotifier {
           }),
         );
     await _scanSince(_lastScan ?? DateTime.now(), advanceLastScan: true);
+    await _retryHeld();
+  }
+
+  /// Held for a reason that can clear by itself: no exchange rate yet
+  /// (offline), or the account wasn't set up yet. Not Fuliza read with
+  /// automatic import off: that waits for Fuliza history.
+  static const _retryable = {
+    SkipReason.foreignCurrency,
+    SkipReason.bankNoAccount,
+    SkipReason.fulizaNoAccount,
+  };
+
+  /// Reads held messages again (they are older than the last check, so the
+  /// usual scan never sees them) and adds any that can be added now.
+  Future<void> _retryHeld() async {
+    final held = {
+      for (final r in _retryable) ...?_skippedKeys[r],
+    };
+    if (held.isEmpty || _isScanning) return;
+    try {
+      final messages = await _gateway.readInbox(
+        senders: SmsParser.allSenders,
+        since: DateTime.now().subtract(const Duration(days: 31)),
+      );
+      for (final sms in messages) {
+        final p = SmsParser.parse(
+          sender: sms.sender,
+          body: sms.body,
+          date: sms.date,
+        );
+        if (p != null && held.contains(p.dedupeKey)) await handle(sms);
+      }
+    } catch (e) {
+      debugPrint('Retrying held messages failed: $e');
+    }
   }
 
   Future<int> _scanSince(

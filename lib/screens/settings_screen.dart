@@ -785,8 +785,8 @@ List<String> equityHeldTexts({
     if (foreignCurrency > 0)
       '${n(foreignCurrency, 'Equity card payment in another currency is', 'Equity card '
           'payments in another currency are')} waiting for that day\'s '
-          "exchange rate. It's added, marked as estimated, next time "
-          'PennyWise is online.',
+          "exchange rate. It's added, marked as estimated, the next time "
+          'you open PennyWise while online.',
     if (topUps > 0)
       '${n(topUps, 'top-up', 'top-ups')} from your M-Pesa into Equity '
           "weren't added again, because the M-Pesa side is already saved. "
