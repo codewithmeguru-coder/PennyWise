@@ -7,7 +7,7 @@
 
 **Effective date:** [CONFIRM date]
 **Developer:** [CONFIRM name or business name], Kenya
-**Contact:** [CONFIRM email address for privacy requests]
+**Contact:** doe68196@gmail.com
 
 PennyWise is a personal expense tracker. This policy explains what information the app uses, where it's kept, and the choices you have.
 
@@ -51,7 +51,7 @@ Deletion removes your sign-in, transactions (including the masked SMS copies), a
 - Turn SMS detection off, or remove the permission in Android settings.
 - Edit or delete individual transactions in the app.
 - Remove your profile photo in Settings.
-- Request access or deletion by emailing [CONFIRM email].
+- Ask about your data at doe68196@gmail.com. To delete your account, use the app or the web page above; signing in there proves the account is yours, so email alone can't delete an account.
 
 ## 9. Children
 PennyWise is meant for adults managing their own money and isn't directed at children under 18. [CONFIRM target age.]

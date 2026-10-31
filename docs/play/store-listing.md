@@ -3,7 +3,7 @@
 **App name:** PennyWise (title limit: 30 characters)
 **Category:** Finance
 **Tags:** Budgeting, Personal finance, Expense tracker
-**Contact email:** [CONFIRM]
+**Contact email:** doe68196@gmail.com
 **Privacy policy URL:** [CONFIRM after publishing `privacy-policy.md`]
 
 ## Short description (≤ 80 characters)

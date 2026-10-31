@@ -53,3 +53,10 @@ test('stopped halfway: the request stays, and running again finishes', async () 
   assert.equal(s.marker, false);
   assert.equal(s.signIn, false);
 });
+
+test('the page shows the support email and has no placeholders left', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../../hosting/delete-account/index.html', import.meta.url), 'utf8');
+  assert.match(html, /<a href="mailto:doe68196@gmail\.com" id="contact">doe68196@gmail\.com<\/a>/);
+  assert.doesNotMatch(html, /\[CONFIRM|__[A-Z_]+__/);
+});

@@ -25,7 +25,7 @@
 - The person signs in on the page (Google, or email and password). That sign-in is the proof of ownership. An email address alone never deletes anything.
 - They tick **I understand**, type **DELETE**, and confirm.
 - The page runs the same deletion as the app, then shows **Done**, which confirms the request was received and completed.
-- It also explains what is deleted and what isn't kept. Fill in the `[CONFIRM contact email]` in `index.html` first.
+- It also explains what is deleted and what isn't kept, and gives the support contact doe68196@gmail.com (email can't delete an account).
 
 **URL for Google Play:** `https://pennywise-b986a.web.app/delete-account`
 
