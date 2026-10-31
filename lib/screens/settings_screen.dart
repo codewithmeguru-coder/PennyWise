@@ -420,7 +420,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => CategoriesScreen(registry: registry),
+                        builder: (_) => CategoriesScreen(
+                          registry: registry,
+                          transactions: widget.transactions,
+                        ),
                       ),
                     ),
                   ),
@@ -756,7 +759,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 /// Why Fuliza messages were read but not saved: read while automatic
 /// import was off, or (with it on) their SIM's account isn't set up.
-@visibleForTesting
 String fulizaHeldText(int count, {required bool noAccount}) {
   final messages = count == 1 ? '1 Fuliza message was' : '$count Fuliza '
       'messages were';
@@ -769,7 +771,6 @@ String fulizaHeldText(int count, {required bool noAccount}) {
 }
 
 /// Card payments saved at an estimated shilling amount, to keep or correct.
-@visibleForTesting
 String estimatedText(int count) => count == 1
     ? '1 card payment in another currency was added with an estimated '
           'shilling amount. Check it against your statement.'
@@ -777,7 +778,6 @@ String estimatedText(int count) => count == 1
           'estimated shilling amount. Check them against your statement.';
 
 /// Settings' notes about Equity messages that were read but not added.
-@visibleForTesting
 List<String> equityHeldTexts({
   required int foreignCurrency,
   required int noAccount,

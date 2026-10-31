@@ -480,20 +480,38 @@ class SmsImportService extends ChangeNotifier {
     );
   }
 
+  /// A short, clear description built only from what the SMS says: who or
+  /// what it was for, and how, never a guess. The SMS itself is kept as is.
   static String _description(SmsTransaction t) {
     // Agent names say little about the transaction; the note keeps them.
     if (t.kind == SmsTransactionKind.withdrawal) return 'Cash withdrawal';
     if (t.kind == SmsTransactionKind.deposit) return 'Cash deposit';
+    // Airtime for another number names it (masked), as the SMS does.
+    if (t.kind == SmsTransactionKind.airtime) {
+      return t.phone == null
+          ? 'Airtime'
+          : 'Airtime for ${SmsParser.maskDigits(t.phone!)}';
+    }
     final name = t.counterparty;
     if (name != null && name.isNotEmpty) {
       // Only what the message says, with the direction it gives: money
       // into or out of savings, sent to or received from someone. A
-      // payment to a till or Paybill keeps the business name alone.
+      // payment to a till keeps the business name alone; a Paybill also
+      // names the account paid (masked), so bills to one business tell
+      // apart; a bank card payment says it was by card.
+      final via = t.viaMobileMoney == null
+          ? ''
+          : ' via ${t.source == TransactionSource.equity ? 'M-Pesa' : t.source.label}';
       final described = t.isSavingsProduct
           ? '$name ${t.kind == SmsTransactionKind.received ? 'withdrawal' : 'deposit'}'
           : switch (t.kind) {
               SmsTransactionKind.sent => 'Sent to $name',
-              SmsTransactionKind.received => 'From $name',
+              SmsTransactionKind.received => 'From $name$via',
+              SmsTransactionKind.payment
+                  when t.source == TransactionSource.equity =>
+                'Card: $name',
+              SmsTransactionKind.payment when t.account != null =>
+                '$name · account ${SmsParser.maskDigits(t.account!)}',
               _ => name,
             };
       return described.length > 100 ? described.substring(0, 100) : described;
@@ -527,7 +545,7 @@ class SmsImportService extends ChangeNotifier {
           }),
         );
     await _scanSince(_lastScan ?? DateTime.now(), advanceLastScan: true);
-    await _retryHeld();
+    await retryHeld();
   }
 
   /// Held for a reason that can clear by itself: no exchange rate yet
@@ -539,13 +557,21 @@ class SmsImportService extends ChangeNotifier {
     SkipReason.fulizaNoAccount,
   };
 
+  /// Held messages that may be added once their reason clears.
+  int get retryableCount => {
+    for (final r in _retryable) ...?_skippedKeys[r],
+  }.length;
+
   /// Reads held messages again (they are older than the last check, so the
   /// usual scan never sees them) and adds any that can be added now.
-  Future<void> _retryHeld() async {
+  /// Returns how many were added. Safe to repeat: each is saved at most
+  /// once, by its code.
+  Future<int> retryHeld() async {
     final held = {
       for (final r in _retryable) ...?_skippedKeys[r],
     };
-    if (held.isEmpty || _isScanning) return;
+    if (held.isEmpty || _isScanning || !isActive) return 0;
+    var added = 0;
     try {
       final messages = await _gateway.readInbox(
         senders: SmsParser.allSenders,
@@ -557,11 +583,16 @@ class SmsImportService extends ChangeNotifier {
           body: sms.body,
           date: sms.date,
         );
-        if (p != null && held.contains(p.dedupeKey)) await handle(sms);
+        if (p != null &&
+            held.contains(p.dedupeKey) &&
+            await handle(sms) != null) {
+          added++;
+        }
       }
     } catch (e) {
       debugPrint('Retrying held messages failed: $e');
     }
+    return added;
   }
 
   Future<int> _scanSince(

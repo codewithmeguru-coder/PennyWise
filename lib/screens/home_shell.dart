@@ -476,6 +476,7 @@ class _HomeShellState extends State<HomeShell> {
         onAssign: _assignAccount,
         onEdit: _openTransactionForm,
         simBackfill: widget.simBackfill,
+        smsService: widget.smsService,
       ),
     ));
   }

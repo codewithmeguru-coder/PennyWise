@@ -101,8 +101,10 @@ class SmsParser {
   static final _mpesaDeposit = RegExp(
       r'give\s+' + _ksh + r'\s+cash\s+to\s+(.+?)\s+new\s+m-?pesa',
       caseSensitive: false);
+  // "You bought Ksh50.00 of airtime [for 254712345678] on …": the number is
+  // there only when it was for someone else.
   static final _mpesaAirtime = RegExp(
-      r'bought\s+' + _ksh + r'\s+of\s+airtime',
+      r'bought\s+' + _ksh + r'\s+of\s+airtime(?:\s+for\s+(\+?\d{9,12}))?',
       caseSensitive: false);
   // "Fuliza M-PESA amount is Ksh 50.00. Access Fee charged Ksh 0.50."
   static final _fulizaDraw = RegExp(
@@ -182,7 +184,13 @@ class SmsParser {
       return result(SmsTransactionKind.received, m, who: m.group(2));
     }
     if (_mpesaAirtime.firstMatch(text) case final m?) {
-      return result(SmsTransactionKind.airtime, m);
+      return _Parsed(
+        kind: SmsTransactionKind.airtime,
+        reference: reference,
+        amount: _amount(m.group(1)) ?? 0,
+        phone: m.group(2),
+        fee: fee,
+      );
     }
     if (_mpesaWithdraw.firstMatch(text) case final m?) {
       return result(SmsTransactionKind.withdrawal, m, who: m.group(2));

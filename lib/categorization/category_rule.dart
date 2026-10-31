@@ -61,7 +61,11 @@ class CategoryRule {
     final sms = t.smsText;
     if (sms == null || !t.isDetected) return null;
     final parsed = SmsParser.parse(
-      sender: t.source == TransactionSource.airtel ? 'AIRTELMONEY' : 'MPESA',
+      sender: switch (t.source) {
+        TransactionSource.airtel => 'AIRTELMONEY',
+        TransactionSource.equity => 'EQUITYBANK',
+        _ => 'MPESA',
+      },
       body: sms,
       date: t.date,
     );

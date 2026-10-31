@@ -11,6 +11,9 @@ import '../models/fuliza_link.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../theme/app_theme.dart';
+import 'settings_screen.dart';
+import '../sms/sms_import_service.dart';
+import '../maintenance/review_reasons.dart';
 import 'estimated_amounts_screen.dart';
 import '../utils/formatters.dart';
 import '../utils/transaction_search.dart';
@@ -40,9 +43,15 @@ class NeedsReviewScreen extends StatefulWidget {
     this.onAssign,
     this.onEdit,
     this.simBackfill,
+    this.smsService,
   });
 
   final TransactionStore store;
+
+  /// The user's accounts; null hides the Account tab.
+
+  /// Messages read but held back, with "Retry now"; null hides that card.
+  final SmsImportService? smsService;
 
   /// The user's accounts; null hides the Account tab.
   final AccountStore? accounts;
@@ -206,6 +215,7 @@ class _NeedsReviewScreenState extends State<NeedsReviewScreen> {
           );
         },
       ),
+      if (widget.smsService case final sms?) _HeldCard(sms: sms),
       Expanded(child: _categoryList()),
     ],
   );
@@ -266,10 +276,14 @@ class _NeedsReviewScreenState extends State<NeedsReviewScreen> {
                     ],
                   ),
                 )
-              : TransactionTile(
+              : _WithReason(
                   transaction: items[i - 1],
-                  paidWithFuliza: links.paidWithFuliza(items[i - 1]),
-                  onTap: () => _pick(context, items[i - 1]),
+                  reason: ReviewReasons.category(items[i - 1]),
+                  child: TransactionTile(
+                    transaction: items[i - 1],
+                    paidWithFuliza: links.paidWithFuliza(items[i - 1]),
+                    onTap: () => _pick(context, items[i - 1]),
+                  ),
                 ),
         );
       },
@@ -482,10 +496,14 @@ class _AccountTab extends StatelessWidget {
                 ),
               ),
             for (final t in items) ...[
-              TransactionTile(
+              _WithReason(
                 transaction: t,
-                paidWithFuliza: links.paidWithFuliza(t),
-                onTap: () => _open(context, t),
+                reason: ReviewReasons.account(t, accounts),
+                child: TransactionTile(
+                  transaction: t,
+                  paidWithFuliza: links.paidWithFuliza(t),
+                  onTap: () => _open(context, t),
+                ),
               ),
               const Divider(height: 1, indent: 72),
             ],
@@ -494,6 +512,138 @@ class _AccountTab extends StatelessWidget {
       },
     );
   }
+}
+
+/// A Needs review item with why it is there, under it.
+class _WithReason extends StatelessWidget {
+  const _WithReason({
+    required this.transaction,
+    required this.reason,
+    required this.child,
+  });
+
+  final TransactionModel transaction;
+  final String reason;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      child,
+      Padding(
+        padding: const EdgeInsets.fromLTRB(72, 0, 16, 10),
+        child: Text(
+          reason,
+          key: Key('reason-${transaction.id}'),
+          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+        ),
+      ),
+    ],
+  );
+}
+
+/// Messages PennyWise read but held back, why, and "Retry now". Retrying
+/// only adds what can now be added (each message at most once).
+class _HeldCard extends StatefulWidget {
+  const _HeldCard({required this.sms});
+
+  final SmsImportService sms;
+
+  @override
+  State<_HeldCard> createState() => _HeldCardState();
+}
+
+class _HeldCardState extends State<_HeldCard> {
+  bool _busy = false;
+
+  Future<void> _retry() async {
+    setState(() => _busy = true);
+    final added = await widget.sms.retryHeld();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    final left = widget.sms.retryableCount;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          '${added == 0 ? 'Nothing could be added yet' : 'Added $added'}'
+          '${left == 0 ? '.' : '; $left still held.'}',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.sms,
+    builder: (context, _) {
+      final keys = widget.sms.skippedKeys;
+      int n(SkipReason r) => keys[r]?.length ?? 0;
+      final reasons = [
+        if (n(SkipReason.foreignCurrency) > 0)
+          equityHeldTexts(
+            foreignCurrency: n(SkipReason.foreignCurrency),
+            noAccount: 0,
+            topUps: 0,
+          ).single,
+        if (n(SkipReason.bankNoAccount) > 0)
+          equityHeldTexts(
+            foreignCurrency: 0,
+            noAccount: n(SkipReason.bankNoAccount),
+            topUps: 0,
+          ).single,
+        if (n(SkipReason.fulizaNoAccount) > 0)
+          fulizaHeldText(n(SkipReason.fulizaNoAccount), noAccount: true),
+        // Not retried: PennyWise can't read these yet.
+        if (n(SkipReason.unreadable) > 0)
+          "${n(SkipReason.unreadable)} transaction messages are in a format "
+              "PennyWise can't read yet, so nothing was guessed. Add them by "
+              'hand if needed.',
+      ];
+      if (reasons.isEmpty) return const SizedBox.shrink();
+      return Card(
+        key: const Key('held-messages'),
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Held messages',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              for (final r in reasons)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    r,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  key: const Key('retry-held'),
+                  onPressed:
+                      _busy ||
+                          !widget.sms.isActive ||
+                          widget.sms.retryableCount == 0
+                      ? null
+                      : _retry,
+                  child: Text(_busy ? 'Retrying…' : 'Retry now'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _AccountChoice extends StatelessWidget {

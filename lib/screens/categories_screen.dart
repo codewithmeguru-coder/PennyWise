@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../categorization/category_registry.dart';
+import '../data/data_exception.dart';
+import '../data/transaction_store.dart';
 import '../models/category_icons.dart';
 import '../models/custom_category.dart';
 import '../models/transaction_category.dart';
@@ -9,23 +11,154 @@ import '../theme/app_theme.dart';
 import '../widgets/section_header.dart';
 
 /// Settings › Categories: add your own categories, rename them, change
-/// their icon, and deactivate or reactivate them. Built-in categories are
-/// listed but can't be changed. Nothing here changes any transaction.
+/// their icon, turn them off or on, and delete them. Built-in categories are
+/// listed but can't be changed.
+///
+/// Deleting never leaves a transaction without a category: the ones using
+/// it are first moved to a category the user picks (after confirming), and
+/// the deleted category is kept, turned off, so budgets and learned rules
+/// that mention it still read correctly. It can be turned back on here.
 class CategoriesScreen extends StatelessWidget {
-  const CategoriesScreen({super.key, required this.registry});
+  const CategoriesScreen({super.key, required this.registry, this.transactions});
 
   final CategoryRegistry registry;
+
+  /// The user's transactions, to move off a category being deleted. Without
+  /// it, only categories no transaction uses can be deleted.
+  final TransactionStore? transactions;
+
+  void _say(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
 
   Future<void> _open(BuildContext context, [CustomCategory? existing]) async {
     final message = await showDialog<String>(
       context: context,
       builder: (_) => _CategoryDialog(registry: registry, existing: existing),
     );
-    if (message != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-      );
+    if (!context.mounted || message == null) return;
+    if (message == _CategoryDialog.deleteRequest && existing != null) {
+      await _delete(context, existing);
+      return;
     }
+    _say(context, message);
+  }
+
+  /// Transactions that use [c] (by id; renaming never changes it).
+  List<TransactionModel> _using(CustomCategory c) => [
+    for (final t in transactions?.transactions ?? const <TransactionModel>[])
+      if (t.categoryId == c.id) t,
+  ];
+
+  Future<void> _delete(BuildContext context, CustomCategory c) async {
+    final used = _using(c);
+    final store = transactions;
+    if (used.isNotEmpty && store == null) {
+      _say(context, 'Transactions use "${c.name}". Turn it off instead.');
+      return;
+    }
+    TransactionCategory? moveTo;
+    if (used.isNotEmpty) {
+      final choices = [
+        for (final o in DefaultCategories.forType(c.type))
+          if (o.id != c.id) o,
+      ];
+      moveTo = await showModalBottomSheet<TransactionCategory>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (context) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${used.length} ${used.length == 1 ? 'transaction uses' : 'transactions use'} '
+                  '"${c.name}". Move ${used.length == 1 ? 'it' : 'them'} to:',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final o in choices)
+                      ActionChip(
+                        key: Key('move-to-${o.id}'),
+                        avatar: Icon(o.icon, size: 18),
+                        label: Text(o.name),
+                        onPressed: () => Navigator.of(context).pop(o),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (moveTo == null || !context.mounted) return;
+    }
+    final target = moveTo;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "${c.name}"?'),
+        content: Text(
+          '${target == null ? 'No transactions use it.' : 'The ${used.length} '
+                    '${used.length == 1 ? 'transaction' : 'transactions'} '
+                    'using it move to "${target.name}". Only their category '
+                    'changes.'}\n\n'
+          'It disappears from the categories you can pick. Budgets and '
+          'learned rules that mention it keep working, and you can turn it '
+          'back on from this list.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: const Key('confirm-delete-category'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+
+    // Move first: if a move fails, the category stays, so nothing is left
+    // pointing at a deleted one.
+    var moved = 0;
+    if (target != null) {
+      for (final t in used) {
+        try {
+          await store!.update(t.withCategory(target.id));
+          moved++;
+        } on DataException catch (e) {
+          if (context.mounted) {
+            _say(
+              context,
+              'Moved $moved of ${used.length}, then: ${e.message} '
+              '"${c.name}" was kept; try again.',
+            );
+          }
+          return;
+        }
+      }
+    }
+    final problem = await registry.setActive(c.id, false);
+    if (!context.mounted) return;
+    _say(
+      context,
+      problem ??
+          (moved == 0
+              ? '"${c.name}" deleted'
+              : '"${c.name}" deleted; $moved moved to "${target!.name}"'),
+    );
   }
 
   @override
@@ -161,6 +294,9 @@ class CategoriesScreen extends StatelessWidget {
 /// (e.g. "Pets added"), or null when cancelled.
 class _CategoryDialog extends StatefulWidget {
   const _CategoryDialog({required this.registry, this.existing});
+
+  /// Popped by "Delete…": the screen then asks where its transactions go.
+  static const deleteRequest = '\u0000delete';
 
   final CategoryRegistry registry;
   final CustomCategory? existing;
@@ -309,6 +445,17 @@ class _CategoryDialogState extends State<_CategoryDialog> {
         ),
       ),
       actions: [
+        if (existing != null)
+          TextButton(
+            key: const Key('delete-category'),
+            onPressed: _saving
+                ? null
+                : () => Navigator.of(context).pop(_CategoryDialog.deleteRequest),
+            style: TextButton.styleFrom(
+              foregroundColor: context.colors.expense,
+            ),
+            child: const Text('Delete…'),
+          ),
         if (existing != null)
           TextButton(
             onPressed: _saving
