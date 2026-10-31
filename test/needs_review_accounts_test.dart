@@ -1207,7 +1207,7 @@ void main() {
           await settings.handledKeys(),
           isNot(contains('mpesa_UFL0000007_FULIZA')),
         );
-        expect((await settings.skippedCounts())[SkipReason.fulizaWaiting], 1);
+        expect((await settings.skippedCounts())[SkipReason.fulizaNoAccount], 1);
       },
     );
   });

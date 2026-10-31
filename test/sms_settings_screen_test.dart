@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pennywise/models/transaction_model.dart';
 import 'package:pennywise/sms/sms_gateway.dart';
+import 'package:pennywise/sms/sms_settings.dart';
 
 import 'fake_sms.dart';
 import 'fake_transaction_repository.dart';
@@ -178,5 +180,41 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Edit transaction'), findsOneWidget);
     expect(find.text('Detected from M-Pesa SMS'), findsOneWidget);
+  });
+
+  testWidgets('held Fuliza messages already saved are not counted', (
+    tester,
+  ) async {
+    final settings = FakeSmsSettings(enabled: true, last: DateTime.now());
+    settings.skipped[SkipReason.fulizaWaiting] = {
+      'mpesa_UH1_FULIZA', // already saved, e.g. by Fuliza history
+      'mpesa_UH2_FULIZA',
+      'mpesa_UH3',
+    };
+    await pumpApp(
+      tester,
+      repository: FakeTransactionRepository([
+        TransactionModel(
+          id: 'mpesa_UH1_FULIZA',
+          description: 'Fuliza loan',
+          amount: 30,
+          type: TransactionType.transfer,
+          categoryId: 'transfer',
+          date: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+      ]),
+      sms: FakeSmsGateway(permissionGranted: true),
+      smsSettings: settings,
+    );
+    await openSettings(tester);
+    await tester.scrollUntilVisible(
+      find.textContaining('Fuliza messages were read'),
+      300,
+      scrollable: find.byType(Scrollable).hitTestable().first,
+    );
+    expect(
+      find.textContaining('2 Fuliza messages were read while'),
+      findsOneWidget,
+    );
   });
 }

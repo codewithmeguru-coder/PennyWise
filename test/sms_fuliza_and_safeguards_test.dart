@@ -117,6 +117,19 @@ void main() {
       expect(service.skipped[SkipReason.fulizaWaiting], 2);
     });
 
+    test('held with automatic import on but no Fuliza account: a different '
+        'reason; held ones handled later drop out of the count', () async {
+      settings.autoFuliza = true; // no accounts here, so still held
+      expect(await service.handle(sms(drawUpper)), isNull);
+      expect(service.skipped[SkipReason.fulizaNoAccount], 1);
+      expect(service.skipped[SkipReason.fulizaWaiting], 0);
+
+      final key = service.skippedKeys[SkipReason.fulizaNoAccount]!.single;
+      await settings.addHandledKey(key); // e.g. Fuliza history added it
+      expect((await settings.skippedKeys())[SkipReason.fulizaNoAccount],
+          isEmpty);
+    });
+
     test('the payment funded by Fuliza is still imported normally', () async {
       await service.handle(sms(drawUpper));
       final t = await service.handle(sms(payment));

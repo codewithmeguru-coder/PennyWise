@@ -70,7 +70,7 @@ class SmsImportService extends ChangeNotifier {
   DateTime? _lastScan;
   String? _lastError;
   bool _disposed = false;
-  Map<SkipReason, int> _skipped = const {};
+  Map<SkipReason, Set<String>> _skippedKeys = const {};
 
   /// Only Android can read SMS. Elsewhere the feature is hidden/disabled.
   bool get isSupported => _gateway.isSupported;
@@ -90,7 +90,12 @@ class SmsImportService extends ChangeNotifier {
   String? get lastError => _lastError;
 
   /// Transaction messages not imported, by reason (see [SkipReason]).
-  Map<SkipReason, int> get skipped => _skipped;
+  Map<SkipReason, int> get skipped => {
+    for (final e in _skippedKeys.entries) e.key: e.value.length,
+  };
+
+  /// The codes behind [skipped] (not yet handled).
+  Map<SkipReason, Set<String>> get skippedKeys => _skippedKeys;
 
   /// Detection is on but hasn't checked for messages in over 3 days (e.g.
   /// the app wasn't opened, or something keeps failing). Detection only
@@ -113,7 +118,7 @@ class SmsImportService extends ChangeNotifier {
     try {
       _enabled = await _settings.isEnabled();
       _lastScan = await _settings.lastScan();
-      _skipped = await _settings.skippedCounts();
+      _skippedKeys = await _settings.skippedKeys();
       _hasPermission = await _gateway.hasPermission();
       _notify();
       await _resume();
@@ -219,8 +224,9 @@ class SmsImportService extends ChangeNotifier {
       simSlot: sms.simSlot,
       accounts: _accounts(),
     );
+    final autoFuliza = parsed.kind.isFuliza && await autoFulizaImport();
     if (parsed.kind.isFuliza &&
-        (!await autoFulizaImport() ||
+        (!autoFuliza ||
             transaction.accountId == null ||
             transaction.toAccountId == null)) {
       // Held, not saved, unless the user turned on automatic Fuliza import
@@ -228,7 +234,10 @@ class SmsImportService extends ChangeNotifier {
       // it), and only with both its SIM's M-Pesa and Fuliza accounts known
       // (never guessed). Not marked handled, so Settings › Fuliza history
       // or a later import can still bring it in.
-      await _recordSkipped(SkipReason.fulizaWaiting, key);
+      await _recordSkipped(
+        autoFuliza ? SkipReason.fulizaNoAccount : SkipReason.fulizaWaiting,
+        key,
+      );
       return null;
     }
     // Second check, in Firestore: the repository only creates the document
@@ -244,7 +253,7 @@ class SmsImportService extends ChangeNotifier {
 
   Future<void> _recordSkipped(SkipReason reason, String key) async {
     await _settings.recordSkipped(reason, key);
-    _skipped = await _settings.skippedCounts();
+    _skippedKeys = await _settings.skippedKeys();
     _notify();
   }
 

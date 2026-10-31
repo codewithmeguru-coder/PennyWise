@@ -26,6 +26,10 @@ abstract class SmsSettings {
   /// message text, and only on this phone.
   Future<Map<SkipReason, int>> skippedCounts();
 
+  /// The codes behind [skippedCounts], leaving out any handled since
+  /// (e.g. brought in by Settings › Fuliza history).
+  Future<Map<SkipReason, Set<String>>> skippedKeys();
+
   /// Records that the message with [key] was skipped for [reason]. Recording
   /// the same key twice counts it once.
   Future<void> recordSkipped(SkipReason reason, String key);
@@ -48,10 +52,15 @@ enum SkipReason {
   /// can read yet.
   unreadable,
 
-  /// A Fuliza loan or repayment: read correctly, but held back until loan
-  /// accounts exist, so nothing is recorded wrongly. Not marked as handled,
-  /// so a later import picks it up.
+  /// A Fuliza loan or repayment read while "Import Fuliza automatically"
+  /// was off. Not marked as handled, so Settings › Fuliza history can still
+  /// bring it in.
   fulizaWaiting,
+
+  /// A Fuliza loan or repayment read with automatic import on, but its
+  /// SIM's M-Pesa or Fuliza account isn't set up, so it is held rather
+  /// than recorded wrongly.
+  fulizaNoAccount,
 }
 
 /// [SmsSettings] in SharedPreferences, with keys scoped to one user id.
@@ -134,6 +143,20 @@ class SharedPrefsSmsSettings implements SmsSettings {
       for (final r in SkipReason.values)
         r: (prefs.getStringList('${_prefix}skipped_${r.name}') ?? const [])
             .length,
+    };
+  }
+
+  @override
+  Future<Map<SkipReason, Set<String>>> skippedKeys() async {
+    final prefs = await _prefs;
+    final handled = await handledKeys();
+    return {
+      for (final r in SkipReason.values)
+        r: {
+          for (final k
+              in prefs.getStringList('${_prefix}skipped_${r.name}') ?? const [])
+            if (!handled.contains(k)) k,
+        },
     };
   }
 

@@ -578,16 +578,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
               if (_sms.isActive &&
                   ((_sms.skipped[SkipReason.unreadable] ?? 0) > 0 ||
-                      (_sms.skipped[SkipReason.fulizaWaiting] ?? 0) > 0)) ...[
+                      _heldFuliza(SkipReason.fulizaWaiting) > 0 ||
+                      _heldFuliza(SkipReason.fulizaNoAccount) > 0)) ...[
                 const SizedBox(height: 12),
                 _Notice(
                   icon: Icons.info_outline_rounded,
                   color: context.colors.textSecondary,
                   text: [
-                    if ((_sms.skipped[SkipReason.fulizaWaiting] ?? 0) > 0)
+                    if (_heldFuliza(SkipReason.fulizaWaiting) > 0)
                       fulizaHeldText(
-                        _sms.skipped[SkipReason.fulizaWaiting]!,
-                        autoImportOn: _autoFuliza == true,
+                        _heldFuliza(SkipReason.fulizaWaiting),
+                        noAccount: false,
+                      ),
+                    if (_heldFuliza(SkipReason.fulizaNoAccount) > 0)
+                      fulizaHeldText(
+                        _heldFuliza(SkipReason.fulizaNoAccount),
+                        noAccount: true,
                       ),
                     if ((_sms.skipped[SkipReason.unreadable] ?? 0) > 0)
                       '${_sms.skipped[SkipReason.unreadable]} transaction '
@@ -641,23 +647,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// Held Fuliza messages that are still missing: any already saved (for
+  /// example by an earlier Fuliza history import) aren't counted.
+  int _heldFuliza(SkipReason reason) {
+    final keys = _sms.skippedKeys[reason] ?? const <String>{};
+    if (keys.isEmpty) return 0;
+    final saved = {
+      for (final t in widget.transactions?.transactions ?? const []) t.id,
+    };
+    return keys.where((k) => !saved.contains(k)).length;
+  }
+
   static String _time(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:'
       '${t.minute.toString().padLeft(2, '0')}';
 }
 
-/// Why Fuliza messages were read but not saved. With automatic import off
-/// (the default) that is the reason; with it on, the SIM's M-Pesa or Fuliza
-/// account isn't set up yet.
+/// Why Fuliza messages were read but not saved: read while automatic
+/// import was off, or (with it on) their SIM's account isn't set up.
 @visibleForTesting
-String fulizaHeldText(int count, {required bool autoImportOn}) {
+String fulizaHeldText(int count, {required bool noAccount}) {
   final messages = count == 1 ? '1 Fuliza message was' : '$count Fuliza '
       'messages were';
-  return autoImportOn
+  return noAccount
       ? "$messages read but not added yet: that SIM's M-Pesa or Fuliza "
             "account isn't set up. They'll be added once it is."
-      : '$messages read but not added, because "Import Fuliza '
-            'automatically" is off. To add them, use Fuliza history; any '
+      : '$messages read while "Import Fuliza automatically" was off, so '
+            "they weren't added. To add them, use Fuliza history; any "
             'already saved are skipped.';
 }
 
