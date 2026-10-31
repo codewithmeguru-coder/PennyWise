@@ -25,7 +25,9 @@ import '../maintenance/sim_backfill.dart';
 import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
 import '../sms/sms_import_service.dart';
+import '../sms/estimated_amount.dart';
 import '../theme/app_theme.dart';
+import 'estimated_amounts_screen.dart';
 import '../utils/formatters.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/user_avatar.dart';
@@ -148,12 +150,17 @@ class _HomeShellState extends State<HomeShell> {
     if (!mounted) return;
     final twin = DuplicateFinder.manualMatchesFor(t, widget.store.transactions)
         .firstOrNull;
+    // Paid in another currency: the amount is an estimate to check.
+    final estimate = EstimatedAmount.foreignAmount(t);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text('New ${t.source.label} transaction detected: '
-              '${Formatters.currency(t.amount)} — ${t.description}'
+              '${estimate == null ? '' : 'about '}'
+              '${Formatters.currency(t.amount)}'
+              '${estimate == null ? '' : ' ($estimate, estimated)'}'
+              ' — ${t.description}'
               '${twin == null ? '' : '. Possible duplicate of '
                   '"${twin.description}".'}'),
           behavior: SnackBarBehavior.floating,
@@ -161,7 +168,17 @@ class _HomeShellState extends State<HomeShell> {
           // A snack bar with a button stays until tapped unless told
           // otherwise; this one goes after its duration.
           persist: false,
-          action: twin == null
+          action: estimate != null
+              ? SnackBarAction(
+                  label: 'Check amount',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          EstimatedAmountsScreen(store: widget.store),
+                    ),
+                  ),
+                )
+              : twin == null
               ? SnackBarAction(
                   label: 'Edit',
                   onPressed: () => _openTransactionForm(_latest(t)),
@@ -239,6 +256,7 @@ class _HomeShellState extends State<HomeShell> {
         user: widget.user,
         avatar: widget.avatar,
         photoPicker: widget.photoPicker,
+        onOpenAccounts: _openAccounts,
       ),
     ));
   }

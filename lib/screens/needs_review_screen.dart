@@ -11,6 +11,7 @@ import '../models/fuliza_link.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../theme/app_theme.dart';
+import 'estimated_amounts_screen.dart';
 import '../utils/formatters.dart';
 import '../utils/transaction_search.dart';
 import '../widgets/empty_state.dart';
@@ -174,7 +175,42 @@ class _NeedsReviewScreenState extends State<NeedsReviewScreen> {
     );
   }
 
-  Widget _categoryTab() {
+  /// Estimated amounts to check, then the categories to fix.
+  Widget _categoryTab() => Column(
+    children: [
+      ListenableBuilder(
+        listenable: widget.store,
+        builder: (context, _) {
+          final n = EstimatedAmountsScreen.pending(
+            widget.store.transactions,
+          ).length;
+          if (n == 0) return const SizedBox.shrink();
+          return ListTile(
+            key: const Key('review-estimated'),
+            leading: Icon(
+              Icons.currency_exchange_rounded,
+              color: context.colors.warning,
+            ),
+            title: Text(
+              n == 1
+                  ? '1 estimated amount to check'
+                  : '$n estimated amounts to check',
+            ),
+            subtitle: const Text('Card payments in another currency'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => EstimatedAmountsScreen(store: widget.store),
+              ),
+            ),
+          );
+        },
+      ),
+      Expanded(child: _categoryList()),
+    ],
+  );
+
+  Widget _categoryList() {
     return ListenableBuilder(
       listenable: widget.store,
       builder: (context, _) {

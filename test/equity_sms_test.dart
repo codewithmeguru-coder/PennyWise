@@ -281,7 +281,7 @@ void main() {
     final notes = equityHeldTexts(foreignCurrency: 2, noAccount: 3, topUps: 1);
     expect(notes, hasLength(3));
     expect(notes[0], startsWith('3 Equity messages were read but not added'));
-    expect(notes[1], contains('another currency'));
+    expect(notes[1], contains("waiting for that day's exchange rate"));
     expect(notes[2], startsWith('1 top-up from your M-Pesa into Equity'));
     expect(equityHeldTexts(foreignCurrency: 0, noAccount: 0, topUps: 0),
         isEmpty);

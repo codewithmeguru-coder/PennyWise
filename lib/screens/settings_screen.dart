@@ -21,6 +21,7 @@ import '../theme/appearance.dart';
 import '../utils/formatters.dart';
 import 'app_lock_settings_screen.dart';
 import 'categories_screen.dart';
+import 'estimated_amounts_screen.dart';
 import 'fuliza_import_screen.dart';
 import 'fuliza_report_screen.dart';
 import 'move_fix_screen.dart';
@@ -46,9 +47,13 @@ class SettingsScreen extends StatefulWidget {
     this.user,
     this.avatar,
     this.photoPicker,
+    this.onOpenAccounts,
   });
 
   final SmsImportService smsService;
+
+  /// Opens Accounts (from notes that need an account added first).
+  final VoidCallback? onOpenAccounts;
 
   /// Categories learned from corrections; null hides that section.
   final CategoryRuleStore? categoryRules;
@@ -580,32 +585,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
-              if (_sms.isActive &&
-                  ((_sms.skipped[SkipReason.unreadable] ?? 0) > 0 ||
-                      _heldFuliza(SkipReason.fulizaWaiting) > 0 ||
-                      _heldFuliza(SkipReason.fulizaNoAccount) > 0 ||
-                      _equityNotes().isNotEmpty)) ...[
+              // Each note has a button to where it can be dealt with.
+              for (final (text, label, onTap) in _heldNotes(context)) ...[
                 const SizedBox(height: 12),
                 _Notice(
                   icon: Icons.info_outline_rounded,
                   color: context.colors.textSecondary,
-                  text: [
-                    if (_heldFuliza(SkipReason.fulizaWaiting) > 0)
-                      fulizaHeldText(
-                        _heldFuliza(SkipReason.fulizaWaiting),
-                        noAccount: false,
-                      ),
-                    if (_heldFuliza(SkipReason.fulizaNoAccount) > 0)
-                      fulizaHeldText(
-                        _heldFuliza(SkipReason.fulizaNoAccount),
-                        noAccount: true,
-                      ),
-                    ..._equityNotes(),
-                    if ((_sms.skipped[SkipReason.unreadable] ?? 0) > 0)
-                      '${_sms.skipped[SkipReason.unreadable]} transaction '
-                          "messages are in a format PennyWise can't read yet. "
-                          'Add them by hand if needed.',
-                  ].join('\n\n'),
+                  text: text,
+                  actionLabel: label,
+                  onAction: onTap,
                 ),
               ],
               if (_sms.lastError != null) ...[
@@ -664,12 +652,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return keys.where((k) => !saved.contains(k)).length;
   }
 
-  /// Equity messages read but not added, and why.
-  List<String> _equityNotes() => equityHeldTexts(
-    foreignCurrency: _heldFuliza(SkipReason.foreignCurrency),
-    noAccount: _heldFuliza(SkipReason.bankNoAccount),
-    topUps: _topUpsToFix(),
-  );
+  void _push(Widget screen) => Navigator.of(
+    context,
+  ).push(MaterialPageRoute<void>(builder: (_) => screen));
+
+  /// Messages read but not added, and estimated amounts to check: each with
+  /// the button that opens where to deal with it.
+  List<(String, String?, VoidCallback?)> _heldNotes(BuildContext context) {
+    final store = widget.transactions;
+    final estimated = store == null
+        ? 0
+        : EstimatedAmountsScreen.pending(store.transactions).length;
+    final active = _sms.isActive;
+    int held(SkipReason r) => active ? _heldFuliza(r) : 0;
+    final fuliza = widget.fulizaImporter;
+    final fix = widget.moveFix;
+    final accounts = widget.onOpenAccounts;
+    String one(int noAccount, int foreign, int topUps) => equityHeldTexts(
+      noAccount: noAccount,
+      foreignCurrency: foreign,
+      topUps: topUps,
+    ).single;
+    final unreadable = active ? (_sms.skipped[SkipReason.unreadable] ?? 0) : 0;
+    final topUps = active ? _topUpsToFix() : 0;
+    return [
+      if (estimated > 0 && store != null)
+        (
+          estimatedText(estimated),
+          'Check amounts',
+          () => _push(EstimatedAmountsScreen(store: store)),
+        ),
+      if (held(SkipReason.fulizaWaiting) > 0)
+        (
+          fulizaHeldText(held(SkipReason.fulizaWaiting), noAccount: false),
+          fuliza == null ? null : 'Open Fuliza history',
+          fuliza == null
+              ? null
+              : () => _push(
+                  FulizaImportScreen(
+                    importer: fuliza,
+                    accounts: () => widget.accounts,
+                    transactions: () => store?.transactions ?? const [],
+                  ),
+                ),
+        ),
+      if (held(SkipReason.fulizaNoAccount) > 0)
+        (
+          fulizaHeldText(held(SkipReason.fulizaNoAccount), noAccount: true),
+          accounts == null ? null : 'Open Accounts',
+          accounts,
+        ),
+      if (held(SkipReason.bankNoAccount) > 0)
+        (
+          one(held(SkipReason.bankNoAccount), 0, 0),
+          accounts == null ? null : 'Open Accounts',
+          accounts,
+        ),
+      if (held(SkipReason.foreignCurrency) > 0)
+        (one(0, held(SkipReason.foreignCurrency), 0), null, null),
+      if (topUps > 0)
+        (
+          one(0, 0, topUps),
+          fix == null ? null : 'Open Fix moves',
+          fix == null ? null : () => _push(MoveFixScreen(fix: fix)),
+        ),
+      if (unreadable > 0)
+        (
+          "$unreadable transaction messages are in a format PennyWise can't "
+              'read yet. Add them by hand if needed.',
+          null,
+          null,
+        ),
+    ];
+  }
 
   /// Top-ups into Equity whose M-Pesa record still counts as spending
   /// (Fix moves between your accounts turns those into moves).
@@ -705,6 +760,14 @@ String fulizaHeldText(int count, {required bool noAccount}) {
             'already saved are skipped.';
 }
 
+/// Card payments saved at an estimated shilling amount, to keep or correct.
+@visibleForTesting
+String estimatedText(int count) => count == 1
+    ? '1 card payment in another currency was added with an estimated '
+          'shilling amount. Check it against your statement.'
+    : '$count card payments in another currency were added with an '
+          'estimated shilling amount. Check them against your statement.';
+
 /// Settings' notes about Equity messages that were read but not added.
 @visibleForTesting
 List<String> equityHeldTexts({
@@ -720,10 +783,10 @@ List<String> equityHeldTexts({
           'but not added: add your Equity account first (Accounts › Add, '
           'type Bank, Equity Bank), then use Import last 30 days.',
     if (foreignCurrency > 0)
-      '${n(foreignCurrency, 'Equity card payment was', 'Equity card payments '
-          'were')} in another currency (e.g. USD). The message has no '
-          'shilling amount, so add it by hand with the amount on your '
-          'statement.',
+      '${n(foreignCurrency, 'Equity card payment in another currency is', 'Equity card '
+          'payments in another currency are')} waiting for that day\'s '
+          "exchange rate. It's added, marked as estimated, next time "
+          'PennyWise is online.',
     if (topUps > 0)
       '${n(topUps, 'top-up', 'top-ups')} from your M-Pesa into Equity '
           "weren't added again, because the M-Pesa side is already saved. "

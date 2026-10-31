@@ -8,6 +8,8 @@ import '../categorization/category_rule.dart';
 import '../data/data_exception.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
+import '../services/exchange_rates.dart';
+import 'estimated_amount.dart';
 import 'sms_categorizer.dart';
 import 'sms_gateway.dart';
 import 'sms_parser.dart';
@@ -42,7 +44,12 @@ class SmsImportService extends ChangeNotifier {
     this._rules = _noRules,
     this._accounts = _noAccounts,
     this._isSaved = _neverSaved,
+    this._rates,
   });
+
+  /// That day's market rate for card payments in another currency; null
+  /// holds them instead.
+  final ExchangeRates? _rates;
 
   static bool _neverSaved(String id) => false;
 
@@ -225,18 +232,33 @@ class SmsImportService extends ChangeNotifier {
     // repayments brought in by Settings › Fuliza history are handled too.
     if ((await _settings.handledKeys()).contains(key)) return null;
 
-    final transaction = toTransaction(
+    var transaction = toTransaction(
       parsed,
       rules: _rules(),
       simSlot: sms.simSlot,
       accounts: _accounts(),
     );
     if (parsed.source == TransactionSource.equity) {
-      // A card payment abroad: the SMS has no KES amount, so it waits for
-      // the user instead of being guessed.
+      // A card payment in another currency: the SMS has no KES amount, so
+      // it is saved at that day's market rate and marked as estimated for
+      // the user to keep or correct. Without a rate (offline) it waits and
+      // is tried again next time.
       if (parsed.currency != 'KES') {
-        await _recordSkipped(SkipReason.foreignCurrency, key);
-        return null;
+        final rate = await _rates?.toKes(parsed.currency, parsed.date);
+        if (rate == null) {
+          await _recordSkipped(SkipReason.foreignCurrency, key);
+          return null;
+        }
+        transaction = EstimatedAmount.withAmount(
+          transaction,
+          (parsed.amount * rate * 100).roundToDouble() / 100,
+          EstimatedAmount.note(
+            parsed.currency,
+            parsed.amount,
+            rate,
+            parsed.date,
+          ),
+        );
       }
       // Money the user moved in from their own M-Pesa / Airtel: that side
       // is already saved under the same code, so a second record would

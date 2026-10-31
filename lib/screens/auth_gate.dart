@@ -18,6 +18,7 @@ import '../maintenance/sim_backfill.dart';
 import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
 import '../sms/sms_gateway.dart';
+import '../services/exchange_rates.dart';
 import '../sms/sms_import_service.dart';
 import '../sms/sms_settings.dart';
 import '../theme/app_theme.dart';
@@ -164,6 +165,8 @@ class _SignedInScopeState extends State<_SignedInScope>
     // A top-up into Equity whose M-Pesa side is already saved isn't
     // added a second time.
     isSaved: (id) => _store.transactions.any((t) => t.id == id),
+    // USD card payments: that day's market rate, marked as estimated.
+    rates: OnlineExchangeRates(),
   );
   late final AnchorKeeper _anchors = AnchorKeeper(_accounts);
   late final ZiidiFixer _ziidi = ZiidiFixer(
