@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pennywise/app.dart';
 import 'package:pennywise/security/app_lock_controller.dart';
+import 'package:pennywise/privacy/savings_privacy.dart';
 import 'package:pennywise/theme/appearance.dart';
 
 import 'fake_accounts.dart';
@@ -35,6 +36,7 @@ Future<FakeTransactionRepository> pumpApp(
   FakeCategoryRuleRepository? categoryRules,
   FakeAccountRepository? accounts,
   AppearanceController? appearance,
+  SavingsPrivacyController? savingsPrivacy,
 }) async {
   final repo = repository ?? FakeTransactionRepository(testTransactions());
   final budgetRepo = budgets ?? FakeBudgetRepository();
@@ -60,6 +62,10 @@ Future<FakeTransactionRepository> pumpApp(
       // Light / Dark / System kept in memory, not on the device.
       appearance:
           appearance ?? AppearanceController(store: MemoryAppearanceStore()),
+      // Off unless a test turns it on, so amounts show as before.
+      openingAnimation: false,
+      savingsPrivacy: savingsPrivacy ??
+          SavingsPrivacyController(store: MemorySavingsPrivacyStore(false)),
     ),
   );
   await tester.pumpAndSettle();

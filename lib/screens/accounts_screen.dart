@@ -7,6 +7,7 @@ import '../accounts/balance_assessment.dart';
 import '../accounts/money_account.dart';
 import '../models/transaction_model.dart';
 import '../data/data_exception.dart';
+import '../privacy/savings_privacy.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../utils/validators.dart';
@@ -154,7 +155,7 @@ class AccountsScreen extends StatelessWidget {
                       a.kind == AccountKind.loan
                           ? 'Owed ${Formatters.currency(-a.openingBalance! + 0)}'
                           : 'Starting balance '
-                              '${Formatters.currency(a.openingBalance!)}',
+                              '${a.kind == AccountKind.savings ? SavingsPrivacy.amount(context, a.openingBalance!) : Formatters.currency(a.openingBalance!)}',
                     if (!a.active) 'Hidden',
                   ].join(' · ')),
                   trailing: transactions == null

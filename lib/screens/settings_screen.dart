@@ -14,6 +14,7 @@ import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
 import '../sms/sms_gateway.dart';
 import '../sms/sms_import_service.dart';
+import '../privacy/savings_privacy.dart';
 import '../theme/app_theme.dart';
 import '../theme/appearance.dart';
 import '../utils/formatters.dart';
@@ -367,6 +368,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           final appLock = AppLockScope.maybeOf(context);
           final appearance = AppearanceScope.maybeOf(context);
+          final privacy = SavingsPrivacy.maybeOf(context);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
@@ -606,6 +608,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (appearance != null) ...[
                 const SizedBox(height: 12),
                 _AppearanceCard(controller: appearance),
+              ],
+              if (privacy != null) ...[
+                const SizedBox(height: 12),
+                Card(
+                  child: SwitchListTile(
+                    key: const Key('hide-savings-switch'),
+                    secondary: Icon(
+                      Icons.visibility_off_outlined,
+                      color: context.colors.primary,
+                    ),
+                    title: const Text(
+                      'Hide savings amounts',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text(
+                      'Ziidi and other savings show as KSh •••• until you '
+                      'tap the eye on Home. They hide again when you leave '
+                      'the app.',
+                    ),
+                    value: privacy.enabled,
+                    onChanged: privacy.setEnabled,
+                  ),
+                ),
               ],
               const SizedBox(height: 20),
               const _HowItWorks(),

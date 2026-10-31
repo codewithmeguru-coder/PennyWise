@@ -4,6 +4,7 @@ import '../data/transaction_store.dart';
 import '../models/month_selection.dart';
 import '../models/monthly_trend.dart';
 import '../models/transaction_category.dart';
+import '../privacy/savings_privacy.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/charts/chart_style.dart';
@@ -149,7 +150,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
           ),
           _Note(
             'Income minus spending. Money moved to savings '
-            '(${[for (final m in trend.months) '${_short(m.month)} ${Formatters.currency(m.netSaved)}'].join(', ')}) is shown here, not counted as spending.',
+            '(${[for (final m in trend.months) '${_short(m.month)} ${SavingsPrivacy.amount(context, m.netSaved)}'].join(', ')}) is shown here, not counted as spending.',
           ),
           const SectionHeader(title: 'Spending by category'),
           _card(_categoryChart(trend, labels)),

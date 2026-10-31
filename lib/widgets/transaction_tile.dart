@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/ledger.dart';
+import '../privacy/savings_privacy.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../theme/app_theme.dart';
@@ -111,6 +112,11 @@ class _Amount extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = transaction;
     final fee = t.fee ?? 0;
+    final isSavings = t.type == TransactionType.savingsContribution ||
+        t.type == TransactionType.savingsWithdrawal;
+    if (isSavings && SavingsPrivacy.hidden(context)) {
+      return _line(SavingsPrivacyController.mask);
+    }
     if (fee <= 0) return _line('$sign${Formatters.currency(t.amount)}');
 
     // Expenses and debt repayments: the fee is part of what they cost.

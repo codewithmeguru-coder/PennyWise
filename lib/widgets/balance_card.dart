@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../privacy/savings_privacy.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
@@ -102,10 +103,30 @@ class BalanceCard extends StatelessWidget {
                 const Icon(Icons.savings_rounded,
                     size: 16, color: Colors.white70),
                 const SizedBox(width: 6),
-                Text(
-                  'Savings ${Formatters.currency(savings)}',
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                Flexible(
+                  child: Text(
+                    'Savings ${SavingsPrivacy.amount(context, savings)}',
+                    key: const Key('balance-savings'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
                 ),
+                if (SavingsPrivacy.maybeOf(context) case final p?
+                    when p.enabled)
+                  IconButton(
+                    key: const Key('savings-eye'),
+                    tooltip: p.hidden ? 'Show savings' : 'Hide savings',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      p.hidden
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      size: 18,
+                      color: Colors.white70,
+                    ),
+                    onPressed: p.toggle,
+                  ),
               ],
             ),
           ],

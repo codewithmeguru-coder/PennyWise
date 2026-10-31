@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../accounts/account_balances.dart';
 import '../accounts/money_account.dart';
 import '../models/transaction_model.dart';
+import '../privacy/savings_privacy.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
@@ -112,6 +113,8 @@ class _AccountCard extends StatelessWidget {
     final isLoan = b.account.kind == AccountKind.loan;
     // A loan shows what is owed (positive), never as money available.
     final amount = isLoan ? b.owed : b.shown;
+    final masked = b.account.kind == AccountKind.savings &&
+        SavingsPrivacy.hidden(context);
     final status = isLoan
         ? (amount > 0
             ? 'Owed'
@@ -120,8 +123,9 @@ class _AccountCard extends StatelessWidget {
                 : (b.hasOpening ? 'Nothing owed' : 'Owed: not set'))
         : switch (b.status) {
             BalanceStatus.verified => 'Matches latest SMS',
-            BalanceStatus.mismatch =>
-              'SMS differs by ${Formatters.currency(b.difference!.abs())}',
+            BalanceStatus.mismatch => masked
+                ? 'SMS differs'
+                : 'SMS differs by ${Formatters.currency(b.difference!.abs())}',
             BalanceStatus.anchored => 'From starting balance',
             BalanceStatus.fromSms => 'From latest SMS',
             BalanceStatus.unverified => 'Estimated · no starting balance',
@@ -157,8 +161,10 @@ class _AccountCard extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '${b.isEstimate && !isLoan ? '~' : ''}'
-                    '${Formatters.currency(amount)}',
+                    masked
+                        ? SavingsPrivacyController.mask
+                        : '${b.isEstimate && !isLoan ? '~' : ''}'
+                              '${Formatters.currency(amount)}',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,

@@ -15,7 +15,9 @@ import 'services/photo_picker.dart';
 import 'sms/sms_gateway.dart';
 import 'sms/sms_settings.dart';
 import 'theme/app_theme.dart';
+import 'privacy/savings_privacy.dart';
 import 'theme/appearance.dart';
+import 'widgets/opening_animation.dart';
 
 /// Root widget: owns the [AuthService] and applies the theme.
 class PennyWiseApp extends StatefulWidget {
@@ -34,6 +36,8 @@ class PennyWiseApp extends StatefulWidget {
     this.smsSettingsForUser,
     this.appLock,
     this.appearance,
+    this.savingsPrivacy,
+    this.openingAnimation = true,
   });
 
   /// Optional auth service, so tests can run without Firebase.
@@ -84,6 +88,12 @@ class PennyWiseApp extends StatefulWidget {
   /// memory. Defaults to one saved on this phone.
   final AppearanceController? appearance;
 
+  /// Optional "Hide savings amounts", so tests can keep it in memory.
+  final SavingsPrivacyController? savingsPrivacy;
+
+  /// The short logo reveal on opening (off in most tests).
+  final bool openingAnimation;
+
   @override
   State<PennyWiseApp> createState() => _PennyWiseAppState();
 }
@@ -98,6 +108,9 @@ class _PennyWiseAppState extends State<PennyWiseApp> {
   late final AppearanceController _appearance =
       (widget.appearance ?? AppearanceController())..init();
 
+  late final SavingsPrivacyController _privacy =
+      (widget.savingsPrivacy ?? SavingsPrivacyController())..init();
+
   /// "Forgot PIN? Sign out": signs out of Firebase first (if that fails,
   /// nothing changes), then clears App Lock on this device only. No cloud
   /// data is touched.
@@ -110,16 +123,20 @@ class _PennyWiseAppState extends State<PennyWiseApp> {
   void dispose() {
     _appLock.dispose();
     _appearance.dispose();
+    _privacy.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AppearanceScope(
-      controller: _appearance,
-      child: ValueListenableBuilder<ThemeMode>(
-        valueListenable: _appearance,
-        builder: (context, mode, _) => _app(mode),
+    return SavingsPrivacy(
+      controller: _privacy,
+      child: AppearanceScope(
+        controller: _appearance,
+        child: ValueListenableBuilder<ThemeMode>(
+          valueListenable: _appearance,
+          builder: (context, mode, _) => _app(mode),
+        ),
       ),
     );
   }
@@ -132,14 +149,18 @@ class _PennyWiseAppState extends State<PennyWiseApp> {
       darkTheme: AppTheme.dark,
       themeMode: mode,
       // App Lock wraps every route and dialog, not just one screen.
-      builder: (context, child) => AppLockScope(
-        controller: _appLock,
-        child: AppLockGate(
+      builder: (context, child) {
+        final app = AppLockScope(
           controller: _appLock,
-          onForgotPin: _forgotPin,
-          child: child!,
-        ),
-      ),
+          child: AppLockGate(
+            controller: _appLock,
+            onForgotPin: _forgotPin,
+            child: child!,
+          ),
+        );
+        // The logo reveal sits on top; everything underneath starts at once.
+        return widget.openingAnimation ? OpeningAnimation(child: app) : app;
+      },
       home: AuthGate(
         authService: _authService,
         repositoryForUser: widget.repositoryForUser ??
