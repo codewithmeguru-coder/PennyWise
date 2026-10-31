@@ -56,6 +56,14 @@ class TransactionStore extends ChangeNotifier {
         budget: budget,
       );
 
+  /// Figures from [start] up to (not including) [end]: a day or a week.
+  MonthlySummary summaryBetween(DateTime start, DateTime end) =>
+      MonthlySummary.between(
+        transactions: _transactions,
+        start: start,
+        end: end,
+      );
+
   double get monthIncome => summaryFor(DateTime.now()).income;
   double get monthExpenses => summaryFor(DateTime.now()).expenses;
 

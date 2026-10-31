@@ -53,6 +53,22 @@ class MonthlySummary {
     // time. DateTime(year, 13) rolls over to January of the next year.
     final start = DateTime(month.year, month.month);
     final end = DateTime(month.year, month.month + 1);
+    return MonthlySummary.between(
+      transactions: transactions,
+      start: start,
+      end: end,
+      budget: budget,
+    );
+  }
+
+  /// The same figures for any stretch of time from [start] up to (not
+  /// including) [end], such as one day or one week. [month] is then [start].
+  factory MonthlySummary.between({
+    required List<TransactionModel> transactions,
+    required DateTime start,
+    required DateTime end,
+    double? budget,
+  }) {
     final ledger = Ledger.of(transactions
         .where((t) => !t.date.isBefore(start) && t.date.isBefore(end)));
 

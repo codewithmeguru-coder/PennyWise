@@ -55,14 +55,14 @@ class WelcomeGreeting extends StatelessWidget {
     return Row(
       children: [
         if (store == null)
-          UserAvatar(user: user, radius: 18)
+          UserAvatar(user: user, radius: 16)
         else
           ListenableBuilder(
             listenable: store,
             builder: (context, _) =>
-                UserAvatar(user: user, radius: 18, customImage: store.photo),
+                UserAvatar(user: user, radius: 16, customImage: store.photo),
           ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,8 +74,8 @@ class WelcomeGreeting extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                   color: context.colors.textPrimary,
                 ),
               ),

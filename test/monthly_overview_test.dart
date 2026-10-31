@@ -287,8 +287,8 @@ void main() {
 
     final overview = find.byType(MonthlyOverviewCard);
     Finder inOverview(Finder f) => find.descendant(of: overview, matching: f);
-    String? headerMonth(WidgetTester tester) =>
-        tester.widget<Text>(find.byKey(const Key('home-header-month'))).data;
+    String? headerDate(WidgetTester tester) =>
+        tester.widget<Text>(find.byKey(const Key('home-header-date'))).data;
     Finder inBudgets(Finder f) =>
         find.descendant(of: find.byType(BudgetsScreen), matching: f);
 
@@ -349,7 +349,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(headerMonth(tester), Formatters.monthYear(thisMonth));
+      expect(headerDate(tester), Formatters.fullDate(DateTime.now()));
       // Can't go past the current month.
       final next = tester.widget<IconButton>(
         inOverview(
@@ -388,15 +388,15 @@ void main() {
       await pumpApp(tester, repository: FakeTransactionRepository(data()));
       await showOverview(tester);
 
-      expect(headerMonth(tester), Formatters.monthYear(thisMonth));
+      expect(headerDate(tester), Formatters.fullDate(DateTime.now()));
       await tester.tap(inOverview(find.byTooltip('Previous month')));
       await tester.pumpAndSettle();
       expect(
         inOverview(find.text(Formatters.monthYear(lastMonth))),
         findsOneWidget,
       );
-      // The header names the month shown, not today's.
-      expect(headerMonth(tester), Formatters.monthYear(lastMonth));
+      // The header keeps today's date; the overview names the month.
+      expect(headerDate(tester), Formatters.fullDate(DateTime.now()));
       expect(inOverview(find.text('KSh 700.00')), findsWidgets);
       expect(inOverview(find.text('KSh 0.00')), findsOneWidget); // income
       expect(
@@ -423,7 +423,7 @@ void main() {
         inOverview(find.text(Formatters.monthYear(thisMonth))),
         findsOneWidget,
       );
-      expect(headerMonth(tester), Formatters.monthYear(thisMonth));
+      expect(headerDate(tester), Formatters.fullDate(DateTime.now()));
     });
 
     testWidgets('an empty month and a month with only income say so', (
@@ -492,7 +492,7 @@ void main() {
       expect(inOverview(find.text('KSh 45.00')), findsWidgets);
       expect(inOverview(find.text('KSh 300.00')), findsNothing);
       // A new profile starts on the current month.
-      expect(headerMonth(tester), Formatters.monthYear(thisMonth));
+      expect(headerDate(tester), Formatters.fullDate(DateTime.now()));
     });
 
     testWidgets('a load error in the overview offers Retry', (tester) async {

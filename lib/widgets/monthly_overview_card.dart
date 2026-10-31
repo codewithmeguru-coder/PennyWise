@@ -8,14 +8,18 @@ import '../models/budget_model.dart';
 import '../models/category_budget.dart';
 import '../models/month_selection.dart';
 import '../models/monthly_summary.dart';
+import '../models/spend_period.dart';
 import '../models/transaction_category.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import 'charts/category_donut.dart';
 import 'month_switcher.dart';
 
-/// Home's monthly overview for the shared [month]: income, spending and
-/// net, the budget (or a way to set one), and spending by category.
+/// Home's overview: income, spending and net, and spending by category.
+///
+/// Day | Week | Month picks the period. Month (the default) follows the
+/// shared [month] and shows its budget; a day or a Monday-to-Sunday week
+/// has no budget of its own and leaves the shared month alone.
 ///
 /// Every figure is [TransactionStore.summaryFor], the same calculation as
 /// Budgets, over the user's saved transactions and that month's budget.
@@ -28,6 +32,7 @@ class MonthlyOverviewCard extends StatefulWidget {
     this.onOpenBudgets,
     this.categoryBudgets,
     this.onOpenTrends,
+    this.clock = DateTime.now,
   });
 
   /// Under the figures: fees are in Expenses; moves between the user's own
@@ -48,11 +53,33 @@ class MonthlyOverviewCard extends StatefulWidget {
   /// Per-category limits: categories over or near theirs are mentioned.
   final CategoryBudgetRepository? categoryBudgets;
 
+  /// The phone's local time (tests pick the day).
+  final DateTime Function() clock;
+
   @override
   State<MonthlyOverviewCard> createState() => _MonthlyOverviewCardState();
 }
 
 class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
+  var _period = SpendPeriod.month;
+
+  /// The day or week on show; null while showing a month.
+  PeriodRange? _range;
+
+  void _choose(SpendPeriod period) => setState(() {
+    if (period == SpendPeriod.month && _period != SpendPeriod.month) {
+      // The month's budget is listened to afresh (a stream is listened to
+      // only once).
+      _budget = widget.budgetRepository.watchMonth(_shown);
+      _limits = widget.categoryBudgets?.watchMonth(_shown);
+    }
+    _period = period;
+    // A day or week starts on today.
+    _range = period == SpendPeriod.month
+        ? null
+        : PeriodRange.containing(period, widget.clock());
+  });
+
   late DateTime _shown = widget.month.value;
   late Stream<BudgetModel?> _budget = widget.budgetRepository.watchMonth(
     _shown,
@@ -94,7 +121,7 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
               children: [
                 Expanded(
                   child: Text(
-                    'Monthly overview',
+                    _period.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -116,6 +143,37 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
                   ),
               ],
             ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 4),
+              child: SegmentedButton<SpendPeriod>(
+                key: const Key('overview-period'),
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                segments: [
+                  for (final p in SpendPeriod.values)
+                    ButtonSegment(
+                      value: p,
+                      label: Text(p.label, key: Key('period-${p.name}')),
+                    ),
+                ],
+                selected: {_period},
+                onSelectionChanged: (s) => _choose(s.single),
+              ),
+            ),
+            if (_range case final range?) ...[
+              _RangeSwitcher(
+                range: range,
+                now: widget.clock(),
+                onChanged: (r) => setState(() => _range = r),
+              ),
+              ListenableBuilder(
+                listenable: widget.store,
+                builder: (context, _) => _rangeBody(context, range),
+              ),
+            ] else ...[
             MonthSwitcher(
               selection: widget.month,
               padding: const EdgeInsets.only(bottom: 8),
@@ -136,6 +194,7 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
                     ),
               ),
             ),
+            ],
           ],
         ),
       ),
@@ -157,6 +216,88 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
+
+  /// One day or week: the same figures and categories as a month, by the
+  /// same rules. Budgets are monthly, so none is shown here.
+  Widget _rangeBody(BuildContext context, PeriodRange range) {
+    final store = widget.store;
+    if (store.error != null) {
+      return _Notice(
+        icon: Icons.cloud_off_rounded,
+        text: 'Couldn\'t load transactions. ${store.error!}',
+        action: TextButton(onPressed: store.retry, child: const Text('Retry')),
+      );
+    }
+    if (store.isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final summary = store.summaryBetween(range.start, range.end);
+    final where = range.period == SpendPeriod.day
+        ? 'on ${range.label}'
+        : 'in this week';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _figures(context, summary),
+        const SizedBox(height: 16),
+        if (summary.byCategory.isNotEmpty)
+          CategoryDonut(
+            categories: summary.byCategory,
+            onTap: widget.onOpenBudgets,
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              summary.transactionCount == 0
+                  ? 'No transactions $where'
+                  : 'No spending $where',
+              key: const Key('overview-empty'),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.colors.textSecondary),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Income, Expenses and Net, with what Expenses means.
+  Widget _figures(BuildContext context, MonthlySummary summary) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: _Figure(
+              label: 'Income',
+              amount: summary.income,
+              color: context.colors.income,
+            ),
+          ),
+          Expanded(
+            child: _Figure(
+              label: 'Expenses',
+              amount: summary.expenses,
+              color: context.colors.expense,
+            ),
+          ),
+          Expanded(
+            child: _Figure(label: 'Net', amount: summary.net, signed: true),
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      // What "Expenses" means, by the Ledger's rules.
+      Text(
+        MonthlyOverviewCard.expensesCaption,
+        key: const Key('overview-expenses-caption'),
+        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+      ),
+    ],
+  );
 
   /// Limits that couldn't be loaded are left out (Budgets says why).
   Widget _body(
@@ -185,34 +326,7 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _Figure(
-                label: 'Income',
-                amount: summary.income,
-                color: context.colors.income,
-              ),
-            ),
-            Expanded(
-              child: _Figure(
-                label: 'Expenses',
-                amount: summary.expenses,
-                color: context.colors.expense,
-              ),
-            ),
-            Expanded(
-              child: _Figure(label: 'Net', amount: summary.net, signed: true),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        // What "Expenses" means, by the Ledger's rules.
-        Text(
-          MonthlyOverviewCard.expensesCaption,
-          key: Key('overview-expenses-caption'),
-          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
-        ),
+        _figures(context, summary),
         const SizedBox(height: 12),
         if (budget.hasError)
           _Notice(
@@ -266,6 +380,71 @@ class _MonthlyOverviewCardState extends State<MonthlyOverviewCard> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// "‹ Saturday, 31 October 2026 ›" with "Today" under it. Can't go past
+/// the day or week containing [now].
+class _RangeSwitcher extends StatelessWidget {
+  const _RangeSwitcher({
+    required this.range,
+    required this.now,
+    required this.onChanged,
+  });
+
+  final PeriodRange range;
+  final DateTime now;
+  final ValueChanged<PeriodRange> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = range.period.label.toLowerCase();
+    final current = range.currentLabel(now);
+    final canGoForward = !range.next.start.isAfter(now);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Previous $unit',
+            onPressed: () => onChanged(range.previous),
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  range.label,
+                  key: const Key('overview-range'),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: context.colors.textPrimary,
+                  ),
+                ),
+                if (current != null)
+                  Text(
+                    current,
+                    key: const Key('overview-range-current'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Next $unit',
+            onPressed: canGoForward ? () => onChanged(range.next) : null,
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -98,25 +98,19 @@ class DashboardScreen extends StatelessWidget {
   /// Opens the Edit / Delete menu for a transaction.
   final ValueChanged<TransactionModel>? onTransactionLongPress;
 
-  static Widget _headerMonth(BuildContext context, DateTime month) => Text(
-    Formatters.monthYear(month),
-    key: const Key('home-header-month'),
+  /// Today's date on the phone, e.g. "Saturday, 31 October 2026". The
+  /// overview names its own day, week or month.
+  static Widget _today(BuildContext context) => Text(
+    Formatters.fullDate(DateTime.now()),
+    key: const Key('home-header-date'),
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
     style: TextStyle(
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: FontWeight.w500,
       color: context.colors.textSecondary,
     ),
   );
-
-  /// The month the overview shows (shared with Budgets), so the header
-  /// never names a different one.
-  Widget _monthOnShow(BuildContext context) => switch (month) {
-    final m? => ValueListenableBuilder<DateTime>(
-      valueListenable: m,
-      builder: (context, shown, _) => _headerMonth(context, shown),
-    ),
-    null => _headerMonth(context, DateTime.now()),
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +124,7 @@ class DashboardScreen extends StatelessWidget {
           slivers: [
             SliverAppBar(
               pinned: true,
-              toolbarHeight: 72,
+              toolbarHeight: 60,
               leading: onOpenMenu == null
                   ? null
                   : IconButton(
@@ -142,11 +136,11 @@ class DashboardScreen extends StatelessWidget {
                 final u? => WelcomeGreeting(
                   user: u,
                   avatar: avatar,
-                  subtitle: _monthOnShow(context),
+                  subtitle: _today(context),
                 ),
                 null => Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [const Text('PennyWise'), _monthOnShow(context)],
+                  children: [const Text('PennyWise'), _today(context)],
                 ),
               },
               actions: [

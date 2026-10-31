@@ -33,6 +33,25 @@ class Formatters {
     return shortDate(date);
   }
 
+  static const List<String> _weekdays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+    'Sunday',
+  ];
+
+  /// e.g. "Saturday, 31 October 2026" (weekday from [DateTime.weekday]).
+  static String fullDate(DateTime date) =>
+      '${_weekdays[date.weekday - 1]}, ${date.day} ${monthYear(date)}';
+
+  /// e.g. "Mon 26 Oct – Sun 1 Nov 2026"; both years when they differ.
+  static String weekRange(DateTime first, DateTime last) {
+    String day(DateTime d) =>
+        '${_weekdays[d.weekday - 1].substring(0, 3)} ${d.day} '
+        '${_months[d.month - 1]}';
+    return first.year == last.year
+        ? '${day(first)} – ${day(last)} ${last.year}'
+        : '${day(first)} ${first.year} – ${day(last)} ${last.year}';
+  }
+
   /// e.g. "12 Sep 2026"
   static String shortDate(DateTime date) =>
       '${date.day} ${_months[date.month - 1]} ${date.year}';
