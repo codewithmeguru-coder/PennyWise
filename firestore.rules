@@ -36,6 +36,14 @@ service cloud.firestore {
       return request.resource.data.createdAt == resource.data.createdAt;
     }
 
+    // Account deletion: once the owner has recorded a deletion request
+    // (users/{uid}/deletionRequest/current), the records normally kept
+    // forever (accounts, balance history, categories) may be deleted too,
+    // by that owner only. Nothing else changes.
+    function deleting(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/deletionRequest/current);
+    }
+
     // ---- users/{uid} -----------------------------------------------------
 
     function isValidProfile(data) {
@@ -264,8 +272,10 @@ service cloud.firestore {
 
       match /accounts/{accountId} {
         // No delete: hiding an account (active = false) keeps every
-        // transaction that points at it meaningful.
+        // transaction that points at it meaningful. Only when the owner is
+        // deleting their whole account.
         allow read: if isOwner(userId);
+        allow delete: if isOwner(userId) && deleting(userId);
         allow create: if isOwner(userId)
           && isValidAccount(request.resource.data, accountId)
           && stampedNow('createdAt') && stampedNow('updatedAt');
@@ -362,7 +372,9 @@ service cloud.firestore {
                resource.data, 'amount', 'effectiveAt')
           && holdsAnchor(getAfter(anchoredAccount(resource.data.accountId)).data,
                resource.data, 'previousAmount', 'previousEffectiveAt');
-        // No delete: the history is kept.
+        // No delete: the history is kept, unless the owner is deleting
+        // their whole account.
+        allow delete: if isOwner(userId) && deleting(userId);
       }
 
       // ---- users/{uid}/budgets/{monthId} ---------------------------------
@@ -444,7 +456,21 @@ service cloud.firestore {
           && request.resource.data.type == resource.data.type
           && createdAtUnchanged()
           && stampedNow('updatedAt');
-        allow delete: if false;
+        // No delete (turning off keeps old records readable), unless the
+        // owner is deleting their whole account.
+        allow delete: if isOwner(userId) && deleting(userId);
+      }
+
+      // ---- users/{uid}/deletionRequest/current ----------------------------
+      // Recorded first when the owner deletes their account, so a deletion
+      // that stops halfway can be finished later. Only "requestedAt",
+      // stamped now; removed by the owner as the last step.
+      match /deletionRequest/{docId} {
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && docId == 'current'
+          && request.resource.data.keys().hasOnly(['requestedAt'])
+          && stampedNow('requestedAt');
       }
 
       // ---- users/{uid}/private/avatar ------------------------------------

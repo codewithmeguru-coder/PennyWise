@@ -94,4 +94,42 @@ class FakeAuthService implements AuthService {
 
   @override
   Future<void> signOut() async => _set(null);
+
+  @override
+  bool signsInWithGoogle = false;
+
+  /// What [reauthenticate] does: the correct password (others fail), or
+  /// for Google: true = confirmed, false = cancelled, null = wrong account.
+  String correctPassword = 'secret12';
+  bool? googleReauth = true;
+  int reauthCalls = 0;
+
+  /// When set, [deleteSignIn] throws it once.
+  AuthException? nextDeleteError;
+  bool signInDeleted = false;
+
+  @override
+  Future<bool> reauthenticate({String? password}) async {
+    reauthCalls++;
+    if (signsInWithGoogle) {
+      if (googleReauth == null) {
+        throw const AuthException('That is a different Google account.');
+      }
+      return googleReauth!;
+    }
+    if (password != correctPassword) {
+      throw const AuthException('Incorrect password.');
+    }
+    return true;
+  }
+
+  @override
+  Future<void> deleteSignIn() async {
+    if (nextDeleteError case final e?) {
+      nextDeleteError = null;
+      throw e;
+    }
+    signInDeleted = true;
+    _set(null);
+  }
 }

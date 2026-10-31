@@ -19,6 +19,7 @@ import '../models/month_selection.dart';
 import '../models/transaction_category.dart';
 import '../models/transaction_model.dart';
 import '../services/auth_service.dart';
+import '../services/account_deletion.dart';
 import '../services/avatar_store.dart';
 import '../services/photo_picker.dart';
 import '../maintenance/internal_transfer_fix.dart';
@@ -58,6 +59,7 @@ class HomeShell extends StatefulWidget {
     this.ziidiFixer,
     this.moveFix,
     this.simBackfill,
+    this.accountDeletion,
     this.anchorKeeper,
     required this.user,
     required this.onSignOut,
@@ -101,6 +103,9 @@ class HomeShell extends StatefulWidget {
 
   /// Needs review › Account › "Fill in SIMs from your messages".
   final SimBackfill? simBackfill;
+
+  /// Settings › Delete account; null hides it.
+  final AccountDeletion? accountDeletion;
 
   /// Changes starting balances with an audit trail and Undo.
   final AnchorKeeper? anchorKeeper;
@@ -259,6 +264,7 @@ class _HomeShellState extends State<HomeShell> {
         photoPicker: widget.photoPicker,
         onOpenAccounts: _openAccounts,
         showRepairTools: RepairTools.shownTo(widget.user),
+        accountDeletion: widget.accountDeletion,
       ),
     ));
   }

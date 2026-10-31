@@ -9,7 +9,7 @@
 |---|---|
 | Does the app collect or share any required user data types? | Yes (collects; does not share) |
 | Is all collected data encrypted in transit? | Yes (Firebase and HTTPS) |
-| Can users request that their data be deleted? | **Not yet.** In-app account deletion and a web request link must be added first (blocker). |
+| Can users request that their data be deleted? | Yes: in the app (Settings › Delete account) and at https://pennywise-b986a.web.app/delete-account, once the rules and page are deployed |
 | Shared with third parties? | No |
 
 ## Data types
@@ -35,5 +35,5 @@
 
 ## Security section
 - Data is encrypted in transit: yes.
-- Users can request deletion: only after the deletion feature is added.
+- Users can request deletion: yes (in the app and on the web page).
 - Independent security review: no.

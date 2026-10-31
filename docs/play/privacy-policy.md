@@ -41,7 +41,11 @@ Your account data (sections 1–2) is stored in **Google Firebase** (Cloud Fires
 Only to provide the app: recording and categorising your transactions, budgets, balances, reports, and sign-in. No profiling, ads or credit scoring.
 
 ## 7. Retention and deletion
-Your data stays in your account until you delete it. **[BLOCKER / CONFIRM]** Google Play requires both an in-app way to delete your account and its data and a web link to request deletion. The app doesn't have this yet. Once it's added, describe here what is deleted and how long deletion takes.
+Your data stays in your account until you delete it. You can delete your account and all its data at any time:
+- **In the app:** Settings › Delete account.
+- **On the web:** https://pennywise-b986a.web.app/delete-account. Sign in to prove the account is yours; an email address alone isn't enough.
+
+Deletion removes your sign-in, transactions (including the masked SMS copies), accounts and balance history, budgets, categories, learned categories, profile and profile photo, straight away. PennyWise keeps no other copies and nothing is kept for legal reasons. Google may keep encrypted system backups and logs for a limited time under its own policies.
 
 ## 8. Your choices
 - Turn SMS detection off, or remove the permission in Android settings.

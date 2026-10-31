@@ -12,7 +12,7 @@
 | SHA-1 registered | **Debug key only** (`8F:31:FE…`). Upload key: missing. Play App Signing key: missing (you get it after the first upload). |
 | Login at narrow widths | Tested at 280, 320 and 393, light and dark. |
 | SMS disclosure | Updated to name Equity Bank and the SIM. |
-| Account deletion | **Missing.** Play requires it for apps where users can create an account. |
+| Account deletion | Built: in the app and as a web page (`docs/play/account-deletion.md`). **Needs the rules and page deployed** (your approval). |
 | Privacy policy | Draft in `privacy-policy.md`; needs your details, then publishing at a public URL. |
 
 ## Upload key vs Play App Signing key
@@ -27,7 +27,7 @@
 2. **Create `android/key.properties`** (step 2). Git already ignores it; check with `git check-ignore android/key.properties`.
 3. **Build and verify:** `flutter build appbundle --release`, then `keytool -printcert -jarfile build/app/outputs/bundle/release/app-release.aab`. The Owner shown should be you, not "Android Debug".
 4. **Send me the upload key's SHA-1** (from `keytool -list -v -keystore <path> -alias upload`). It's public, not secret. With your OK, I'll add it to Firebase.
-5. **Approve building account deletion** (in the app, plus a web request page). I can build it.
+5. **Approve deploying account deletion:** the Firestore rules and the web page (`account-deletion.md`). Then fill the contact email in the page.
 6. **Fill in the [CONFIRM] items** in the privacy policy, then publish it at a public URL.
 7. **Create a Play Console developer account** ($25, identity verification).
    - New personal accounts must run a **closed test with at least 12 testers for 14 days** before applying for production. Check the current numbers in Play Console.
@@ -44,7 +44,7 @@
 11. **Run the closed test** (12+ testers, 14 days), fix issues, then **apply for production**.
 
 ## Not yet done
-- Account deletion (blocker).
+- Account deletion: built; the rules and page must be deployed (blocker until then).
 - Upload key and its SHA-1 (blocker).
 - App signing key SHA-1 (after the first upload).
 - Published privacy policy (blocker).

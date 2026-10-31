@@ -6,6 +6,7 @@ import '../categorization/category_rule_repository.dart';
 import '../data/transaction_store.dart';
 import '../security/app_lock_gate.dart';
 import '../services/auth_service.dart';
+import '../services/account_deletion.dart';
 import '../services/avatar_store.dart';
 import '../services/photo_picker.dart';
 import '../widgets/user_avatar.dart';
@@ -21,6 +22,7 @@ import '../theme/appearance.dart';
 import '../utils/formatters.dart';
 import 'app_lock_settings_screen.dart';
 import 'categories_screen.dart';
+import 'delete_account_screen.dart';
 import 'estimated_amounts_screen.dart';
 import 'fuliza_import_screen.dart';
 import 'fuliza_report_screen.dart';
@@ -49,7 +51,11 @@ class SettingsScreen extends StatefulWidget {
     this.photoPicker,
     this.onOpenAccounts,
     this.showRepairTools = false,
+    this.accountDeletion,
   });
+
+  /// Delete account (at the end of Settings); null hides it.
+  final AccountDeletion? accountDeletion;
 
   /// The one-off repair tools (Fix old Ziidi records, Fix moves between
   /// your accounts) are listed only for profiles that can need them (see
@@ -648,6 +654,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
               const SizedBox(height: 20),
               const _HowItWorks(),
+              if (widget.accountDeletion case final deletion?) ...[
+                const SizedBox(height: 24),
+                Card(
+                  child: ListTile(
+                    key: const Key('delete-account'),
+                    leading: Icon(
+                      Icons.delete_forever_outlined,
+                      color: context.colors.expense,
+                    ),
+                    title: Text(
+                      'Delete account',
+                      style: TextStyle(
+                        color: context.colors.expense,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Permanently delete your account and all its data',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _push(
+                      DeleteAccountScreen(
+                        deletion: deletion,
+                        email: widget.user?.email,
+                        transactionCount:
+                            widget.transactions?.transactions.length,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           );
         },

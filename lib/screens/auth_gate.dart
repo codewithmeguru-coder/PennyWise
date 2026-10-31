@@ -11,6 +11,8 @@ import '../data/category_repository.dart';
 import '../data/transaction_repository.dart';
 import '../data/transaction_store.dart';
 import '../services/auth_service.dart';
+import '../services/account_deletion.dart';
+import '../security/app_lock_gate.dart';
 import '../services/avatar_store.dart';
 import '../services/photo_picker.dart';
 import '../maintenance/internal_transfer_fix.dart';
@@ -96,6 +98,7 @@ class _AuthGateState extends State<AuthGate> {
           smsGateway: widget.smsGateway,
           smsSettings: widget.smsSettingsForUser(user.uid),
           onSignOut: authService.signOut,
+          auth: authService,
         );
       },
     );
@@ -120,6 +123,7 @@ class _SignedInScope extends StatefulWidget {
     required this.smsGateway,
     required this.smsSettings,
     required this.onSignOut,
+    required this.auth,
   });
 
   final AppUser user;
@@ -134,6 +138,9 @@ class _SignedInScope extends StatefulWidget {
   final SmsGateway smsGateway;
   final SmsSettings smsSettings;
   final Future<void> Function() onSignOut;
+
+  /// For Settings › Delete account (confirming it's the owner first).
+  final AuthService auth;
 
   @override
   State<_SignedInScope> createState() => _SignedInScopeState();
@@ -183,6 +190,20 @@ class _SignedInScopeState extends State<_SignedInScope>
     accounts: () => _accounts,
     transactions: () => _store.transactions,
   );
+  /// Settings › Delete account: this user's records, this phone's
+  /// settings for them (and App Lock), then their sign-in.
+  late final AccountDeletion _deletion = AccountDeletion(
+    data: FirestoreUserDataStore(uid: widget.user.uid),
+    auth: widget.auth,
+    clearLocal: () async {
+      final lock = context
+          .getInheritedWidgetOfExactType<AppLockScope>()
+          ?.notifier;
+      await LocalUserData.clear(widget.user.uid);
+      await lock?.resetAfterSignOut();
+    },
+  );
+
   late final MoveFix _moveFix = MoveFix(
     repository: FirestoreMoveFixRepository(uid: widget.user.uid),
     store: SharedPrefsMoveFixStore(uid: widget.user.uid),
@@ -279,6 +300,7 @@ class _SignedInScopeState extends State<_SignedInScope>
       anchorKeeper: _anchors,
       user: widget.user,
       onSignOut: widget.onSignOut,
+      accountDeletion: _deletion,
     );
   }
 }

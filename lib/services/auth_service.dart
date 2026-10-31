@@ -77,6 +77,20 @@ abstract class AuthService {
   Future<void> sendPasswordReset(String email);
 
   Future<void> signOut();
+
+  /// Whether the signed-in account uses Google (otherwise a password).
+  bool get signsInWithGoogle;
+
+  /// Confirms it's really the account's owner, just before something
+  /// permanent: a password account gives its [password]; a Google account
+  /// picks the same Google account again. Returns false if the user
+  /// cancelled. Throws an [AuthException] for a wrong password, a different
+  /// Google account, or no connection.
+  Future<bool> reauthenticate({String? password});
+
+  /// Deletes the signed-in sign-in account itself (Firebase Authentication).
+  /// Firebase allows it only shortly after [reauthenticate].
+  Future<void> deleteSignIn();
 }
 
 /// [AuthService] backed by Firebase Authentication (email/password).
@@ -280,6 +294,83 @@ class FirebaseAuthService implements AuthService {
           }
         }
       });
+
+  @override
+  bool get signsInWithGoogle =>
+      _auth.currentUser?.providerData.any(
+        (p) => p.providerId == GoogleAuthProvider.PROVIDER_ID,
+      ) ??
+      false;
+
+  @override
+  Future<bool> reauthenticate({String? password}) async {
+    final user = _auth.currentUser;
+    if (user == null) throw const AuthException('You are signed out.');
+    try {
+      if (signsInWithGoogle) {
+        if (kIsWeb) {
+          await user.reauthenticateWithPopup(GoogleAuthProvider());
+          return true;
+        }
+        await _initGoogle();
+        final account = await GoogleSignIn.instance.authenticate();
+        final idToken = account.authentication.idToken;
+        if (idToken == null) {
+          throw const AuthException(
+              'Google didn\'t return sign-in details. Please try again.');
+        }
+        await user.reauthenticateWithCredential(
+          GoogleAuthProvider.credential(idToken: idToken),
+        );
+        return true;
+      }
+      if (password == null || password.isEmpty) {
+        throw const AuthException('Enter your password.');
+      }
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: user.email ?? '', password: password),
+      );
+      return true;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) return false;
+      throw AuthException(_googleMessage(e));
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'popup-closed-by-user' ||
+          e.code == 'cancelled-popup-request') {
+        return false;
+      }
+      throw AuthException(switch (e.code) {
+        'user-mismatch' =>
+          'That is a different Google account. Pick the one you use for '
+              'PennyWise.',
+        'wrong-password' || 'invalid-credential' => 'Incorrect password.',
+        _ => messageForCode(e.code),
+      });
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      debugPrint('Re-authentication failed: $e');
+      throw const AuthException('Could not confirm it\'s you. Please try again.');
+    }
+  }
+
+  @override
+  Future<void> deleteSignIn() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    try {
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(e.code == 'requires-recent-login'
+          ? 'For your safety, confirm it\'s you again, then try once more.'
+          : messageForCode(e.code));
+    }
+    if (!kIsWeb && _googleInit != null) {
+      try {
+        await GoogleSignIn.instance.signOut();
+      } catch (_) {}
+    }
+  }
 
   /// Creates or refreshes the `users/{uid}` profile document.
   ///
