@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pennywise/models/transaction_model.dart';
 import 'package:pennywise/privacy/savings_privacy.dart';
-import 'package:pennywise/widgets/opening_animation.dart';
 
 import 'fake_transaction_repository.dart';
 import 'test_app.dart';
 
-// "Hide savings amounts" (savings show as KSh •••• until the eye is tapped)
-// and the short logo reveal on opening. Amounts are made up.
+// "Hide savings amounts": savings show as KSh •••• until the eye is
+// tapped. Amounts are made up.
 
 final now = DateTime.now();
 
@@ -119,48 +118,6 @@ void main() {
       expect(privacy.enabled, isFalse);
       expect(privacy.hidden, isFalse);
       privacy.dispose();
-    });
-  });
-
-  group('opening animation', () {
-    Widget app({bool reduceMotion = false, VoidCallback? onTap}) =>
-        MaterialApp(
-          home: MediaQuery(
-            data: MediaQueryData(disableAnimations: reduceMotion),
-            child: OpeningAnimation(
-              child: Scaffold(
-                body: Center(
-                  child: TextButton(
-                    onPressed: onTap,
-                    child: const Text('Underneath'),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-
-    testWidgets('shows briefly over the app, which is already there and can '
-        'be tapped', (tester) async {
-      var taps = 0;
-      await tester.pumpWidget(app(onTap: () => taps++));
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(find.byKey(const Key('opening-animation')), findsOneWidget);
-      expect(find.text('Underneath'), findsOneWidget);
-      await tester.tap(find.text('Underneath'));
-      expect(taps, 1);
-
-      await tester.pump(OpeningAnimation.duration);
-      await tester.pump();
-      expect(find.byKey(const Key('opening-animation')), findsNothing);
-    });
-
-    testWidgets('skipped when the phone asks for fewer animations', (
-      tester,
-    ) async {
-      await tester.pumpWidget(app(reduceMotion: true));
-      expect(find.byKey(const Key('opening-animation')), findsNothing);
-      expect(find.text('Underneath'), findsOneWidget);
     });
   });
 }

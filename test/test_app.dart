@@ -63,7 +63,6 @@ Future<FakeTransactionRepository> pumpApp(
       appearance:
           appearance ?? AppearanceController(store: MemoryAppearanceStore()),
       // Off unless a test turns it on, so amounts show as before.
-      openingAnimation: false,
       savingsPrivacy: savingsPrivacy ??
           SavingsPrivacyController(store: MemorySavingsPrivacyStore(false)),
     ),
