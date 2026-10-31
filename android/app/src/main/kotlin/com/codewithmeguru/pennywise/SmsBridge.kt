@@ -1,4 +1,4 @@
-package com.example.pennywise
+package com.codewithmeguru.pennywise
 
 import android.Manifest
 import android.app.Activity

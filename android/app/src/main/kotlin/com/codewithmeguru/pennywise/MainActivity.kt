@@ -1,4 +1,4 @@
-package com.example.pennywise
+package com.codewithmeguru.pennywise
 
 import android.os.Build
 import io.flutter.embedding.android.FlutterFragmentActivity
