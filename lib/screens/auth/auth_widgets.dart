@@ -192,7 +192,16 @@ class GoogleSignInButton extends StatelessWidget {
                   excludeFromSemantics: true,
                 ),
                 const SizedBox(width: 12),
-                const Text('Continue with Google'),
+                // Shrinks to two lines on a very narrow screen instead of
+                // running past the button's edge.
+                const Flexible(
+                  child: Text(
+                    'Continue with Google',
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
     );

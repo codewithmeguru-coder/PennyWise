@@ -191,8 +191,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 onPressed: _loading ? null : _continueWithGoogle,
               ),
               const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              // Wraps onto two lines on a narrow screen.
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   const Text('Already have an account?'),
                   TextButton(

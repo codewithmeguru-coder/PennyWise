@@ -13,6 +13,7 @@ import '../data/budget_repository.dart';
 import '../data/category_budget_repository.dart';
 import '../data/data_exception.dart';
 import '../data/transaction_store.dart';
+import '../maintenance/repair_tools.dart';
 import '../models/duplicate_finder.dart';
 import '../models/month_selection.dart';
 import '../models/transaction_category.dart';
@@ -257,6 +258,7 @@ class _HomeShellState extends State<HomeShell> {
         avatar: widget.avatar,
         photoPicker: widget.photoPicker,
         onOpenAccounts: _openAccounts,
+        showRepairTools: RepairTools.shownTo(widget.user),
       ),
     ));
   }

@@ -15,6 +15,7 @@ class AppUser {
     required this.email,
     this.displayName,
     this.photoUrl,
+    this.createdAt,
   });
 
   final String uid;
@@ -23,6 +24,10 @@ class AppUser {
 
   /// Profile picture (from Google). Null for email/password accounts.
   final String? photoUrl;
+
+  /// When the account was created, as Firebase Auth records it (null when
+  /// unknown).
+  final DateTime? createdAt;
 }
 
 /// Thrown by [AuthService] with a message that is safe to show to the user.
@@ -308,6 +313,7 @@ class FirebaseAuthService implements AuthService {
           email: user.email ?? '',
           displayName: user.displayName,
           photoUrl: user.photoURL,
+          createdAt: user.metadata.creationTime,
         );
 
   /// Runs [action], converting Firebase errors into [AuthException]s.

@@ -48,7 +48,13 @@ class SettingsScreen extends StatefulWidget {
     this.avatar,
     this.photoPicker,
     this.onOpenAccounts,
+    this.showRepairTools = false,
   });
+
+  /// The one-off repair tools (Fix old Ziidi records, Fix moves between
+  /// your accounts) are listed only for profiles that can need them (see
+  /// `RepairTools`). Notes that point to a tool still open it.
+  final bool showRepairTools;
 
   final SmsImportService smsService;
 
@@ -487,7 +493,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             : null,
                         onTap: _sms.isScanning ? null : _scanRecent,
                       ),
-                      if (widget.ziidiFixer case final fixer?)
+                      if (widget.ziidiFixer case final fixer?
+                          when widget.showRepairTools)
                         ListTile(
                           leading: const Icon(Icons.savings_outlined),
                           title: const Text('Fix old Ziidi records'),
@@ -501,7 +508,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                         ),
-                      if (widget.moveFix case final fix?)
+                      if (widget.moveFix case final fix?
+                          when widget.showRepairTools)
                         ListTile(
                           leading: const Icon(Icons.swap_horiz_rounded),
                           title: const Text(
