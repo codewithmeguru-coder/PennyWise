@@ -73,7 +73,8 @@
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
   import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, onAuthStateChanged, signOut, deleteUser } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
   import { getFirestore, collection, doc, getDocs, query, limit, writeBatch, setDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-  import { canDelete, deleteEverything } from './deletion.mjs';
+  // Absolute: the page is served at /delete-account (no trailing slash).
+  import { canDelete, deleteEverything } from '/delete-account/deletion.mjs';
 
   const app = initializeApp({"apiKey": "AIzaSyBUkPTv_nRPfFKTqq82g_tVqO6fDTWS5KU", "appId": "1:240925304261:web:5265f292d706c9d80997ac", "messagingSenderId": "240925304261", "projectId": "pennywise-b986a", "authDomain": "pennywise-b986a.firebaseapp.com"});
   const auth = getAuth(app);

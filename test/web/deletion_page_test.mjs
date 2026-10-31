@@ -59,4 +59,6 @@ test('the page shows the support email and has no placeholders left', async () =
   const html = await readFile(new URL('../../hosting/delete-account/index.html', import.meta.url), 'utf8');
   assert.match(html, /<a href="mailto:doe68196@gmail\.com" id="contact">doe68196@gmail\.com<\/a>/);
   assert.doesNotMatch(html, /\[CONFIRM|__[A-Z_]+__/);
+  // Served at /delete-account, so a relative import would miss the file.
+  assert.match(html, /from '\/delete-account\/deletion\.mjs'/);
 });
