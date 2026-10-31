@@ -583,9 +583,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: context.colors.textSecondary,
                   text: [
                     if ((_sms.skipped[SkipReason.fulizaWaiting] ?? 0) > 0)
-                      '${_sms.skipped[SkipReason.fulizaWaiting]} Fuliza '
-                          "messages were read but not added yet. They'll be "
-                          'added once loan accounts are available.',
+                      fulizaHeldText(
+                        _sms.skipped[SkipReason.fulizaWaiting]!,
+                        autoImportOn: _autoFuliza == true,
+                      ),
                     if ((_sms.skipped[SkipReason.unreadable] ?? 0) > 0)
                       '${_sms.skipped[SkipReason.unreadable]} transaction '
                           "messages are in a format PennyWise can't read yet. "
@@ -618,6 +619,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static String _time(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:'
       '${t.minute.toString().padLeft(2, '0')}';
+}
+
+/// Why Fuliza messages were read but not saved. With automatic import off
+/// (the default) that is the reason; with it on, the SIM's M-Pesa or Fuliza
+/// account isn't set up yet.
+@visibleForTesting
+String fulizaHeldText(int count, {required bool autoImportOn}) {
+  final messages = count == 1 ? '1 Fuliza message was' : '$count Fuliza '
+      'messages were';
+  return autoImportOn
+      ? "$messages read but not added yet: that SIM's M-Pesa or Fuliza "
+            "account isn't set up. They'll be added once it is."
+      : '$messages read but not added, because "Import Fuliza '
+            'automatically" is off. To add them, use Fuliza history; any '
+            'already saved are skipped.';
 }
 
 /// Light, Dark, or follow the phone. Applies at once and is remembered.
