@@ -18,6 +18,28 @@ val keyProperties = Properties().apply {
 }
 val hasUploadKey = keyProperties.getProperty("storeFile") != null
 
+// A key.properties that points at a missing keystore, or leaves a value out,
+// stops the build with a clear message instead of failing later. Values are
+// never printed.
+if (hasUploadKey) {
+    for (name in listOf("storeFile", "storePassword", "keyAlias", "keyPassword")) {
+        if (keyProperties.getProperty(name).isNullOrBlank()) {
+            throw GradleException("android/key.properties has no $name. See docs/release-signing.md.")
+        }
+    }
+    if (!file(keyProperties.getProperty("storeFile")).exists()) {
+        throw GradleException(
+            "The upload keystore named in android/key.properties (storeFile) doesn't exist. " +
+                "See docs/release-signing.md."
+        )
+    }
+} else {
+    logger.warn(
+        "PennyWise: android/key.properties not found, so release builds are signed " +
+            "with the DEBUG key. Google Play will reject them. See docs/release-signing.md."
+    )
+}
+
 android {
     namespace = "com.codewithmeguru.pennywise"
     compileSdk = flutter.compileSdkVersion
