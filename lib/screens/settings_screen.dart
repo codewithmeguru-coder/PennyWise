@@ -292,7 +292,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Also import the last 30 days?'),
         content: const Text(
-            'Detection is on and will add new M-Pesa and Airtel Money '
+            'Detection is on and will add new M-Pesa, Airtel Money and '
+            'Equity Bank '
             'transactions from now on. PennyWise can also add the ones from '
             'your messages of the last 30 days. Anything already in '
             'PennyWise is skipped, so nothing is added twice.'),
@@ -312,7 +313,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (importOld == true) {
       await _scanRecent();
     } else {
-      _showMessage('Automatic detection is on. New M-Pesa and Airtel Money '
+      _showMessage('Automatic detection is on. New M-Pesa, Airtel Money '
+          'and Equity Bank '
           'transactions will be added when you open PennyWise.');
     }
   }
@@ -456,7 +458,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text(supported
-                      ? 'Add M-Pesa and Airtel Money transactions from '
+                      ? 'Add M-Pesa, Airtel Money and Equity Bank '
+                          'transactions from '
                           'their SMS automatically. PennyWise checks your '
                           "messages when you open it; it doesn't run in the "
                           'background.'
@@ -486,8 +489,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         leading: const Icon(Icons.history_rounded),
                         title: const Text('Import last 30 days'),
                         subtitle: const Text(
-                            'Add transactions from older M-Pesa / Airtel '
-                            'messages. Duplicates are skipped.'),
+                            'Add transactions from older M-Pesa, Airtel '
+                            'and Equity messages. Duplicates are skipped.'),
                         trailing: _sms.isScanning
                             ? const SizedBox.square(
                                 dimension: 20,
@@ -878,14 +881,15 @@ class _PermissionExplanationDialog extends StatelessWidget {
       title: const Text('Allow PennyWise to read transaction SMS?'),
       content: const SingleChildScrollView(
         child: Text(
-          'To add your M-Pesa and Airtel Money transactions automatically, '
-          'PennyWise needs permission to read SMS on this phone.\n\n'
-          '• Only messages from M-Pesa and Airtel Money are read. All other '
-          'SMS are ignored on the phone and never leave it.\n'
+          'To add your M-Pesa, Airtel Money and Equity Bank transactions '
+          'automatically, PennyWise needs permission to read and receive SMS '
+          'on this phone.\n\n'
+          '• Only messages from M-Pesa, Airtel Money and Equity Bank are '
+          'used. All other SMS are skipped on the phone and never leave it.\n'
           '• From each transaction message, only the amount, type, '
-          'merchant/sender, date and transaction code are saved to your '
-          'account, plus a copy of that one message with phone and account '
-          'numbers masked.\n'
+          'merchant/sender, date, transaction code and which SIM received it '
+          'are saved to your account, plus a copy of that one message with '
+          'phone and account numbers masked.\n'
           '• You can turn this off at any time in Settings.\n\n'
           'Android will now ask you to allow SMS access.',
         ),
@@ -924,7 +928,8 @@ class _HowItWorks extends StatelessWidget {
           ),
           SizedBox(height: 6),
           Text(
-            'When an M-Pesa or Airtel Money message arrives, PennyWise reads '
+            'When an M-Pesa, Airtel Money or Equity Bank message arrives, '
+            'PennyWise reads '
             'the amount, merchant and transaction code and adds it to your '
             'transactions with a suggested category. Tap it to change '
             'anything.\n\n'
