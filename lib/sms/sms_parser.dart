@@ -17,6 +17,7 @@ class SmsParser {
   static const Map<TransactionSource, List<String>> senders = {
     TransactionSource.mpesa: ['MPESA'],
     TransactionSource.airtel: ['AIRTELMONEY', 'AIRTEL'],
+    TransactionSource.equity: ['EQUITYBANK'],
   };
 
   /// Every allowed sender id, for the Android filter.
@@ -56,6 +57,7 @@ class SmsParser {
     final parsed = switch (source) {
       TransactionSource.mpesa => _parseMpesa(text),
       TransactionSource.airtel => _parseAirtel(text),
+      TransactionSource.equity => _parseEquity(text, date),
       TransactionSource.manual => null,
     };
     if (parsed == null || parsed.amount <= 0) return null;
@@ -70,6 +72,8 @@ class SmsParser {
       phone: parsed.phone,
       account: parsed.account,
       fee: parsed.fee,
+      currency: parsed.currency,
+      viaMobileMoney: parsed.viaMobileMoney,
       maskedText: maskDigits(text),
     );
   }
@@ -129,6 +133,7 @@ class SmsParser {
       TransactionSource.mpesa => _mpesaCode.hasMatch(text),
       TransactionSource.airtel => _airtelLeadingId.hasMatch(text) ||
           _airtelId.hasMatch(text),
+      TransactionSource.equity => _equityLooksLike.hasMatch(text),
       TransactionSource.manual => false,
     };
   }
@@ -266,6 +271,123 @@ class SmsParser {
     );
   }
 
+  // ---- Equity Bank -------------------------------------------------------
+
+  // Only messages about the user's own Equity account. Receipts Equity
+  // sends for M-Pesa payments into other people's accounts or tills ("…has
+  // been credited to…", "…has sent KShs. … to your MPESA", "…deposited to
+  // Equity Account in favor of…", "Payment of KES. … Till No.", "Bill
+  // payment to…") match nothing here: the M-Pesa message already records
+  // them, so they are ignored rather than counted twice.
+
+  // "CONFIRMED. USD 20.00, Auth for card 1234..5678 at GOOGLE*ADS on
+  // 2026-03-12 15:52:10 Ref:123456789012."
+  static final _equityCard = RegExp(
+      r'^confirmed\.?\s+([a-z]{3})\s+([\d,]+(?:\.\d+)?),\s*auth\s+for\s+card\s+'
+      r'\S+\s+at\s+(.+?)\s+on\s+\d{4}-\d\d-\d\d\s+[\d:]+\s+ref:\s*(\w+)',
+      caseSensitive: false);
+  // "Txn: A fee has been deducted from your account Acct:… Amt:KES 300.00
+  // Desc: Annual Debit Card Fee Date:11-09-2026 17:15:02"
+  static final _equityFee = RegExp(
+      r'a\s+fee\s+has\s+been\s+deducted\s+from\s+your\s+account.*?'
+      r'amt:\s*kes\.?\s*([\d,]+(?:\.\d+)?)\s+desc:\s*(.+?)\s+date:\s*([\d\- :]+\d)',
+      caseSensitive: false);
+  // "Dear NAME KES 5000.00 has been drawn from your account 0123......4567
+  // Ref:12345678 on 14-SEP-2026 09:50:01 AM."
+  static final _equityDrawn = RegExp(
+      r'kes\.?\s*([\d,]+(?:\.\d+)?)\s+has\s+been\s+drawn\s+from\s+your\s+'
+      r'account\s+\S+\s+ref:\s*(\w+)',
+      caseSensitive: false);
+  // "1500.00 KES has been successfully sent to JOHN DOE 0********123. Ref.
+  // ABC123 on 28 Oct 2025 at 19:18 EAT. Transaction charge 0.00 KES, SMS
+  // alert charge 0.00 KES"
+  static final _equitySent = RegExp(
+      r'^([\d,]+(?:\.\d+)?)\s*kes\s+has\s+been\s+successfully\s+sent\s+to\s+'
+      r'(.+?)\s+\d[\d*]*\.\s*ref\.?\s*(\w+)',
+      caseSensitive: false);
+  static final _equityCharges = RegExp(
+      r'([\d,]+(?:\.\d+)?)\s*kes', caseSensitive: false);
+  // "You have received 2000.00 KES from JOHN DOE 0********123 to your
+  // Equity account 0********456. Ref. ABC123 on 30 Oct 2025 at 17:23 EAT"
+  static final _equityReceived = RegExp(
+      r'^you\s+have\s+received\s+([\d,]+(?:\.\d+)?)\s*kes\s+from\s+(.+?)\s+'
+      r'\d[\d*]*\s+to\s+your\s+equity\s+account\s+\S+\s+ref\.?\s*(\w+)',
+      caseSensitive: false);
+  // "Confirmed. KES. 1,000.00 from JOHN DOE [Phone No. 2547…] received via
+  // M-Pesa Ref. UJVHK7WQUD on …": paid into the account from mobile money.
+  static final _equityViaMobile = RegExp(
+      r'^confirmed\.?\s*kes\.?\s*([\d,]+(?:\.\d+)?)\s+from\s+(.+?)'
+      r'(?:\s+phone\s+no\.?\s*\d+)?\s+received\s+via\s+(m-?pesa|airtel)\s+'
+      r'ref\.?\s*(\w+)',
+      caseSensitive: false);
+  static final _equityLooksLike = RegExp(
+      r'auth\s+for\s+card|fee\s+has\s+been\s+deducted|has\s+been\s+drawn|'
+      r'successfully\s+sent\s+to|to\s+your\s+equity\s+account|received\s+via',
+      caseSensitive: false);
+
+  static _Parsed? _parseEquity(String text, DateTime date) {
+    if (_equityCard.firstMatch(text) case final m?) {
+      return _Parsed(
+        kind: SmsTransactionKind.payment,
+        reference: 'CARD${m.group(4)!}',
+        amount: _amount(m.group(2)) ?? 0,
+        counterparty: _cleanName(m.group(3)!.replaceAll('*', ' ')),
+        currency: m.group(1)!.toUpperCase(),
+      );
+    }
+    if (_equityFee.firstMatch(text) case final m?) {
+      return _Parsed(
+        kind: SmsTransactionKind.charge,
+        // No reference in the SMS: the time it states is unique enough.
+        reference: 'FEE${m.group(3)!.replaceAll(RegExp(r'\D'), '')}',
+        amount: _amount(m.group(1)) ?? 0,
+        counterparty: m.group(2)!.trim(),
+      );
+    }
+    if (_equityDrawn.firstMatch(text) case final m?) {
+      return _Parsed(
+        kind: SmsTransactionKind.withdrawal,
+        reference: m.group(2)!.toUpperCase(),
+        amount: _amount(m.group(1)) ?? 0,
+        counterparty: 'Equity Bank',
+      );
+    }
+    if (_equitySent.firstMatch(text) case final m?) {
+      final charges = text.toLowerCase().contains('charge')
+          ? _equityCharges
+              .allMatches(text.substring(m.end))
+              .map((c) => _amount(c.group(1)) ?? 0)
+              .fold(0.0, (a, b) => a + b)
+          : 0.0;
+      return _Parsed(
+        kind: SmsTransactionKind.sent,
+        reference: m.group(3)!.toUpperCase(),
+        amount: _amount(m.group(1)) ?? 0,
+        counterparty: _cleanName(m.group(2)!),
+        fee: charges > 0 ? charges : null,
+      );
+    }
+    if (_equityReceived.firstMatch(text) case final m?) {
+      return _Parsed(
+        kind: SmsTransactionKind.received,
+        reference: m.group(3)!.toUpperCase(),
+        amount: _amount(m.group(1)) ?? 0,
+        counterparty: _cleanName(m.group(2)!),
+      );
+    }
+    if (_equityViaMobile.firstMatch(text) case final m?) {
+      final code = m.group(4)!.toUpperCase();
+      return _Parsed(
+        kind: SmsTransactionKind.received,
+        reference: code,
+        amount: _amount(m.group(1)) ?? 0,
+        counterparty: _cleanName(m.group(2)!),
+        viaMobileMoney: code,
+      );
+    }
+    return null;
+  }
+
   // ---- Shared helpers ----------------------------------------------------
 
   /// "Ksh1,500.00", "KES 1500", "Kshs. 20" -> group 1 is the number.
@@ -328,9 +450,13 @@ class _Parsed {
     this.phone,
     this.account,
     this.fee,
+    this.currency = 'KES',
+    this.viaMobileMoney,
   });
 
   final SmsTransactionKind kind;
+  final String currency;
+  final String? viaMobileMoney;
   final String reference;
   final double amount;
   final String? counterparty;

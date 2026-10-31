@@ -151,6 +151,10 @@ enum MoveKind {
 
   /// Withdrawn as cash at an agent.
   cashWithdrawal,
+
+  /// Paid from M-Pesa into the user's own Equity account: Equity's "received
+  /// via M-Pesa" message carries the same code.
+  intoBank,
 }
 
 /// The correction for one record: a transfer between the user's own
@@ -180,8 +184,11 @@ class MoveChange {
   /// The generic account on the other side: Cash for a withdrawal. Two
   /// M-Pesa lines share "mpesa", so a SIM-to-SIM move has none (only the
   /// account ids tell them apart), as the transaction form saves it.
-  String? get toAccount =>
-      kind == MoveKind.cashWithdrawal ? Account.cash.wireName : null;
+  String? get toAccount => switch (kind) {
+    MoveKind.cashWithdrawal => Account.cash.wireName,
+    MoveKind.intoBank => Account.bank.wireName,
+    MoveKind.betweenSims => null,
+  };
 }
 
 /// Totals for one month, before and after.
@@ -361,7 +368,7 @@ class FirestoreMoveFixRepository implements MoveFixRepository {
   }
 }
 
-/// The opt-in "Fix moves between your SIMs" for the signed-in profile.
+/// The opt-in "Fix moves between your accounts" for the signed-in profile.
 ///
 /// - [preview] only reads: the profile's SMS records and this phone's own
 ///   messages. A record is proposed only when its code was "sent" on one of
@@ -473,7 +480,17 @@ class MoveFix {
     for (final r in candidates) {
       final msgs = byCode[r.reference] ?? const [];
       final sent = msgs.where((m) => m.$1.kind == SmsTransactionKind.sent);
-      final got = msgs.where((m) => m.$1.kind == SmsTransactionKind.received);
+      final got = msgs.where(
+        (m) =>
+            m.$1.kind == SmsTransactionKind.received &&
+            m.$1.source != TransactionSource.equity,
+      );
+      // Equity confirming money received from M-Pesa under this code.
+      final intoBank = msgs.where(
+        (m) =>
+            m.$1.source == TransactionSource.equity &&
+            m.$1.viaMobileMoney == r.reference,
+      );
       final withdrawn = msgs.where(
         (m) => m.$1.kind == SmsTransactionKind.withdrawal,
       );
@@ -500,6 +517,36 @@ class MoveFix {
             accountId: wallet.id,
             toAccountId: other.id,
             addFee: feeFor(r, s),
+          ),
+        );
+      } else if (r.type == 'expense' && intoBank.length == 1) {
+        final (b, _) = intoBank.single;
+        final mpesa = msgs.where(
+          (m) => m.$1.source == TransactionSource.mpesa,
+        );
+        final from = r.simSlot ?? (mpesa.isEmpty ? null : mpesa.first.$2);
+        if (from == null) {
+          skip('Move into Equity: SIM unknown');
+          continue;
+        }
+        if (!same(b.amount, r.amount)) {
+          skip('Amounts differ from the messages');
+          continue;
+        }
+        final wallet = accounts.forSim(from, AccountKind.mobileMoney);
+        final bank = accounts.bank(AccountProvider.equity);
+        if (wallet == null || bank == null) {
+          skip('No M-Pesa or Equity account');
+          continue;
+        }
+        changes.add(
+          MoveChange(
+            record: r,
+            kind: MoveKind.intoBank,
+            fromSim: from,
+            accountId: wallet.id,
+            toAccountId: bank.id,
+            addFee: mpesa.isEmpty ? null : feeFor(r, mpesa.first.$1),
           ),
         );
       } else if (r.type == 'expense' &&
@@ -585,7 +632,11 @@ class MoveFix {
         reference: t.reference,
         smsText: t.smsText,
         account: Account.mpesa,
-        toAccount: c.kind == MoveKind.cashWithdrawal ? Account.cash : null,
+        toAccount: switch (c.kind) {
+          MoveKind.cashWithdrawal => Account.cash,
+          MoveKind.intoBank => Account.bank,
+          MoveKind.betweenSims => null,
+        },
         fee: c.addFee ?? t.fee,
         accountId: c.accountId,
         toAccountId: c.toAccountId,

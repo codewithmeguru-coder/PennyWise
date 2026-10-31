@@ -280,6 +280,9 @@ abstract class AccountResolver {
   /// The first active account of [kind] not tied to a SIM (e.g. Cash), or
   /// with [includeHidden] the first such account even if hidden.
   MoneyAccount? firstOf(AccountKind kind, {bool includeHidden = false});
+
+  /// The first active bank account with [provider] (e.g. Equity), or null.
+  MoneyAccount? bank(AccountProvider provider);
 }
 
 /// The signed-in user's accounts, live, plus how SMS map onto them.
@@ -323,6 +326,16 @@ class AccountStore extends ChangeNotifier implements AccountResolver {
   MoneyAccount? firstOf(AccountKind kind, {bool includeHidden = false}) {
     for (final a in _accounts) {
       if ((a.active || includeHidden) && a.kind == kind && a.simSlot == null) {
+        return a;
+      }
+    }
+    return null;
+  }
+
+  @override
+  MoneyAccount? bank(AccountProvider provider) {
+    for (final a in _accounts) {
+      if (a.active && a.kind == AccountKind.bank && a.provider == provider) {
         return a;
       }
     }

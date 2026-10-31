@@ -28,7 +28,10 @@ enum SmsTransactionKind {
 
   /// M-Pesa balance used to repay Fuliza: "Ksh 300.00 from your M-PESA has
   /// been used to fully pay your outstanding Fuliza M-PESA."
-  fulizaRepayment;
+  fulizaRepayment,
+
+  /// A bank's own charge on the account, e.g. "Annual Debit Card Fee".
+  charge;
 
   bool get isFuliza => this == fulizaDraw || this == fulizaRepayment;
 }
@@ -49,9 +52,19 @@ class SmsTransaction {
     this.phone,
     this.account,
     this.fee,
+    this.currency = 'KES',
+    this.viaMobileMoney,
   });
 
   final TransactionSource source;
+
+  /// "KES", or e.g. "USD" for a card payment abroad. Only KES amounts are
+  /// recorded; others wait for the user (the SMS has no KES amount).
+  final String currency;
+
+  /// A bank credit paid in from mobile money ("received via M-Pesa Ref.
+  /// UJV…"): that transaction's code, which is also its M-Pesa record's.
+  final String? viaMobileMoney;
   final SmsTransactionKind kind;
 
   /// Always positive; [kind] decides whether it's money in or out.
@@ -110,6 +123,8 @@ class SmsTransaction {
         SmsTransactionKind.payment ||
         SmsTransactionKind.sent when isSavingsProduct =>
           TransactionType.savingsContribution,
+        // A bank's own fee is spending, like any other charge.
+        SmsTransactionKind.charge => TransactionType.expense,
         _ => TransactionType.expense,
       };
 

@@ -14,6 +14,7 @@ import '../maintenance/ziidi_fix.dart';
 import '../sms/fuliza_import.dart';
 import '../sms/sms_gateway.dart';
 import '../sms/sms_import_service.dart';
+import '../models/transaction_model.dart';
 import '../privacy/savings_privacy.dart';
 import '../theme/app_theme.dart';
 import '../theme/appearance.dart';
@@ -498,10 +499,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       if (widget.moveFix case final fix?)
                         ListTile(
                           leading: const Icon(Icons.swap_horiz_rounded),
-                          title: const Text('Fix moves between your SIMs'),
+                          title: const Text(
+                            'Fix moves between your accounts',
+                          ),
                           subtitle: const Text('See which records are money '
-                              'moved between your own SIMs or withdrawn as '
-                              'cash, then choose whether to fix them.'),
+                              'moved between your own SIMs, into Equity or '
+                              'withdrawn as cash, then choose whether to fix '
+                              'them.'),
                           trailing: const Icon(Icons.chevron_right_rounded),
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
@@ -579,7 +583,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (_sms.isActive &&
                   ((_sms.skipped[SkipReason.unreadable] ?? 0) > 0 ||
                       _heldFuliza(SkipReason.fulizaWaiting) > 0 ||
-                      _heldFuliza(SkipReason.fulizaNoAccount) > 0)) ...[
+                      _heldFuliza(SkipReason.fulizaNoAccount) > 0 ||
+                      _equityNotes().isNotEmpty)) ...[
                 const SizedBox(height: 12),
                 _Notice(
                   icon: Icons.info_outline_rounded,
@@ -595,6 +600,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _heldFuliza(SkipReason.fulizaNoAccount),
                         noAccount: true,
                       ),
+                    ..._equityNotes(),
                     if ((_sms.skipped[SkipReason.unreadable] ?? 0) > 0)
                       '${_sms.skipped[SkipReason.unreadable]} transaction '
                           "messages are in a format PennyWise can't read yet. "
@@ -658,6 +664,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return keys.where((k) => !saved.contains(k)).length;
   }
 
+  /// Equity messages read but not added, and why.
+  List<String> _equityNotes() => equityHeldTexts(
+    foreignCurrency: _heldFuliza(SkipReason.foreignCurrency),
+    noAccount: _heldFuliza(SkipReason.bankNoAccount),
+    topUps: _topUpsToFix(),
+  );
+
+  /// Top-ups into Equity whose M-Pesa record still counts as spending
+  /// (Fix moves between your accounts turns those into moves).
+  int _topUpsToFix() {
+    final keys = _sms.skippedKeys[SkipReason.bankTopUp] ?? const <String>{};
+    if (keys.isEmpty) return 0;
+    final byId = {
+      for (final t in widget.transactions?.transactions ?? const []) t.id: t,
+    };
+    return keys.where((k) {
+      final code = k.substring(k.indexOf('_') + 1);
+      final t = byId['mpesa_$code'] ?? byId['airtel_$code'];
+      return t != null && t.type == TransactionType.expense;
+    }).length;
+  }
+
   static String _time(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:'
       '${t.minute.toString().padLeft(2, '0')}';
@@ -675,6 +703,32 @@ String fulizaHeldText(int count, {required bool noAccount}) {
       : '$messages read while "Import Fuliza automatically" was off, so '
             "they weren't added. To add them, use Fuliza history; any "
             'already saved are skipped.';
+}
+
+/// Settings' notes about Equity messages that were read but not added.
+@visibleForTesting
+List<String> equityHeldTexts({
+  required int foreignCurrency,
+  required int noAccount,
+  required int topUps,
+}) {
+  String n(int count, String one, String many) =>
+      count == 1 ? '1 $one' : '$count $many';
+  return [
+    if (noAccount > 0)
+      '${n(noAccount, 'Equity message was', 'Equity messages were')} read '
+          'but not added: add your Equity account first (Accounts › Add, '
+          'type Bank, Equity Bank), then use Import last 30 days.',
+    if (foreignCurrency > 0)
+      '${n(foreignCurrency, 'Equity card payment was', 'Equity card payments '
+          'were')} in another currency (e.g. USD). The message has no '
+          'shilling amount, so add it by hand with the amount on your '
+          'statement.',
+    if (topUps > 0)
+      '${n(topUps, 'top-up', 'top-ups')} from your M-Pesa into Equity '
+          "weren't added again, because the M-Pesa side is already saved. "
+          'Fix moves between your accounts records them as moves.',
+  ];
 }
 
 /// Light, Dark, or follow the phone. Applies at once and is remembered.

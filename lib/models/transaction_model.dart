@@ -87,13 +87,17 @@ enum Account {
 enum TransactionSource {
   manual,
   mpesa,
-  airtel;
+  airtel,
+
+  /// Equity Bank's own-account SMS (card payments, fees, sends, receipts).
+  equity;
 
   /// Name shown in the UI, e.g. "M-Pesa".
   String get label => switch (this) {
         TransactionSource.manual => 'Manual',
         TransactionSource.mpesa => 'M-Pesa',
         TransactionSource.airtel => 'Airtel Money',
+        TransactionSource.equity => 'Equity Bank',
       };
 }
 
@@ -194,6 +198,7 @@ class TransactionModel {
       switch (source) {
         TransactionSource.mpesa => Account.mpesa,
         TransactionSource.airtel => Account.airtelMoney,
+        TransactionSource.equity => Account.bank,
         TransactionSource.manual => null,
       };
 

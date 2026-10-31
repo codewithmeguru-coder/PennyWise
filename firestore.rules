@@ -143,8 +143,8 @@ service cloud.firestore {
           && (!('note' in data)
               || (data.note is string && data.note.size() <= 500))
           // Set only on transactions detected from an M-Pesa / Airtel Money
-          // SMS (Android). Manual entries don't have them.
-          && (!('source' in data) || data.source in ['mpesa', 'airtel'])
+          // / Equity Bank SMS (Android). Manual entries don't have them.
+          && (!('source' in data) || data.source in ['mpesa', 'airtel', 'equity'])
           && (!('reference' in data)
               || (data.reference is string
                   && data.reference.size() > 0

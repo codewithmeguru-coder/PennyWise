@@ -612,4 +612,94 @@ void main() {
     expect(repo.writes, isEmpty);
     expect(store.saved, isEmpty);
   });
+
+  test('a top-up from M-Pesa into the user’s own Equity becomes a move '
+      'to the Equity account; Undo puts it back', () async {
+    final topUp = rec(
+      'UJV0000009',
+      'expense',
+      2000,
+      category: 'bills',
+      accountId: 'mpesa-sim1',
+      simSlot: 0,
+      account: 'mpesa',
+    );
+    final list = [
+      ...MoneyAccount.starterSet(),
+      const MoneyAccount(
+        id: 'equity',
+        name: 'Equity',
+        kind: AccountKind.bank,
+        provider: AccountProvider.equity,
+      ),
+    ];
+    final acc = AccountStore(FakeAccountRepository(list));
+    await Future<void>.delayed(Duration.zero);
+    final f = await make(
+      [topUp],
+      accountStore: acc,
+      messages: [
+        sms(
+          'UJV0000009 Confirmed. Ksh2,000.00 sent to Equity Paybill Account '
+          'for account 1234567 on 31/10/26 at 10:46 AM New M-PESA balance is '
+          'Ksh100.00. Transaction cost, Ksh0.00.',
+          0,
+        ),
+        RawSms(
+          sender: 'Equity Bank',
+          body:
+              'Confirmed. KES. 2,000.00 from PAT OWNER received via M-Pesa '
+              'Ref. UJV0000009 on 31-10-2026 at 10:46. Thank you.',
+          date: day,
+          simSlot: 0,
+        ),
+      ],
+    );
+    final p = await f.preview();
+    final c = p.changes.single;
+    expect([c.kind, c.accountId, c.toAccountId, c.toAccount], [
+      MoveKind.intoBank,
+      'mpesa-sim1',
+      'equity',
+      'bank',
+    ]);
+    // Spending drops by the top-up; nothing else changes.
+    final m = p.months.single;
+    expect(m.before.expenses - m.after.expenses, 2000);
+    await f.apply(p);
+    final now = repo.records[topUp.id]!;
+    expect([now.type, now.toAccountId, now.toAccount], [
+      'transfer',
+      'equity',
+      'bank',
+    ]);
+    expect((await f.undo()).done, 1);
+    expect(repo.records[topUp.id]!.type, 'expense');
+  });
+
+  test('a payment into someone else’s Equity account is left alone',
+      () async {
+    final other = rec('UJ00000003', 'expense', 400, accountId: 'mpesa-sim1');
+    final f = await make(
+      [other],
+      messages: [
+        sms(
+          'UJ00000003 Confirmed. Ksh400.00 sent to Equity Paybill Account for '
+          'account 7654321 on 30/9/26 at 10:00 AM New M-PESA balance is '
+          'Ksh100.00. Transaction cost, Ksh0.00.',
+          0,
+        ),
+        RawSms(
+          sender: 'Equity Bank',
+          body:
+              'Dear PAT, Your transaction of KES. 400.00 has successfully been '
+              'deposited to Equity Account in favor of JANE WANJIKU Ref. '
+              'Number UJ00000003 on 30-09-2026 at 10:00. Thank you.',
+          date: day,
+          simSlot: 0,
+        ),
+      ],
+    );
+    expect((await f.preview()).changes, isEmpty);
+  });
 }

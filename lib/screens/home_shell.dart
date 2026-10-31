@@ -93,7 +93,7 @@ class HomeShell extends StatefulWidget {
   /// Settings › Fix old Ziidi records (see [ZiidiFixer]).
   final ZiidiFixer? ziidiFixer;
 
-  /// Settings › Fix moves between your SIMs (see [MoveFix]).
+  /// Settings › Fix moves between your accounts (see [MoveFix]).
   final MoveFix? moveFix;
 
   /// Needs review › Account › "Fill in SIMs from your messages".

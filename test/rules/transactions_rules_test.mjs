@@ -79,7 +79,13 @@ const cases = [
   ['refund linked to a purchase', { ...base, type: 'refund', account: 'mpesa', refundOf: 't1' }, true],
   ['debt repayment with interest', { ...base, type: 'debt_repayment', category: 'debt_repayment', account: 'mpesa', interest: 25 }, true],
   ['debt repayment, interest unknown', { ...base, type: 'debt_repayment', category: 'debt_repayment' }, true],
+  // Equity Bank SMS (own account): card payment, bank fee, money drawn to Cash.
+  ['Equity card payment', { ...base, type: 'expense', source: 'equity', reference: 'CARD123456789012', smsText: 'x', account: 'bank', accountId: 'equity' }, true],
+  ['Equity fee', { ...base, type: 'expense', category: 'fees', source: 'equity', reference: 'FEE11092026171502', smsText: 'x', account: 'bank' }, true],
+  ['Equity money drawn to Cash', { ...base, type: 'transfer', category: 'transfer', source: 'equity', reference: '12345678', smsText: 'x', account: 'bank', toAccount: 'cash', accountId: 'equity', toAccountId: 'cash' }, true],
+  ['M-Pesa top-up into Equity as a move', { ...base, type: 'transfer', category: 'transfer', source: 'mpesa', reference: 'UJV0000009', smsText: 'x', account: 'mpesa', toAccount: 'bank', accountId: 'mpesa-sim1', toAccountId: 'equity', simSlot: 0 }, true],
   // Rejected.
+  ['unknown SMS source', { ...base, type: 'expense', source: 'kcb', reference: 'X1', smsText: 'x' }, false],
   ['unknown type', { ...base, type: 'gift' }, false],
   ['transfer without toAccount', { ...base, type: 'transfer', category: 'transfer', account: 'mpesa' }, false],
   ['transfer to the same account', { ...base, type: 'transfer', category: 'transfer', account: 'cash', toAccount: 'cash' }, false],

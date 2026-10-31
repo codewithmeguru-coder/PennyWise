@@ -161,6 +161,9 @@ class _SignedInScopeState extends State<_SignedInScope>
     rules: () => _rules.rules,
     // Each SMS goes to the account of the SIM that received it.
     accounts: () => _accounts,
+    // A top-up into Equity whose M-Pesa side is already saved isn't
+    // added a second time.
+    isSaved: (id) => _store.transactions.any((t) => t.id == id),
   );
   late final AnchorKeeper _anchors = AnchorKeeper(_accounts);
   late final ZiidiFixer _ziidi = ZiidiFixer(

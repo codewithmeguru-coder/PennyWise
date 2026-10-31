@@ -61,6 +61,18 @@ enum SkipReason {
   /// SIM's M-Pesa or Fuliza account isn't set up, so it is held rather
   /// than recorded wrongly.
   fulizaNoAccount,
+
+  /// An Equity card payment in another currency (e.g. USD): the SMS has no
+  /// KES amount, so it is left for the user to add.
+  foreignCurrency,
+
+  /// An Equity message, but no Equity account is set up yet: held, so a
+  /// later import can add it.
+  bankNoAccount,
+
+  /// Money moved into Equity from the user's own M-Pesa / Airtel, whose
+  /// side is already saved: not added again (see Fix moves between your accounts).
+  bankTopUp,
 }
 
 /// [SmsSettings] in SharedPreferences, with keys scoped to one user id.

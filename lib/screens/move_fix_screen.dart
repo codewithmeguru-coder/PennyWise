@@ -5,7 +5,7 @@ import '../maintenance/internal_transfer_fix.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
-/// Settings › Fix moves between your SIMs: shows which records are really
+/// Settings › Fix moves between your accounts: shows which records are really
 /// money moved between the user's own accounts (by both SIMs' messages, or
 /// an agent cash withdrawal), what that does to each month and to the
 /// cards, and changes them only after a confirmation, with a backup first.
@@ -165,7 +165,11 @@ class _MoveFixScreenState extends State<MoveFixScreen> {
   Widget _row(MoveChange c) => Text(
     '${Formatters.shortDate(c.record.date)} · '
     '${Formatters.currency(c.record.amount)} · ${c.record.type} → '
-    '${c.kind == MoveKind.cashWithdrawal ? 'SIM ${c.fromSim + 1} M-Pesa → Cash' : 'SIM ${c.fromSim + 1} → SIM ${c.toSim! + 1} M-Pesa'}'
+    '${switch (c.kind) {
+      MoveKind.cashWithdrawal => 'SIM ${c.fromSim + 1} M-Pesa → Cash',
+      MoveKind.intoBank => 'SIM ${c.fromSim + 1} M-Pesa → Equity',
+      MoveKind.betweenSims => 'SIM ${c.fromSim + 1} → SIM ${c.toSim! + 1} M-Pesa',
+    }}'
     '${c.addFee != null ? ' · fee ${Formatters.currency(c.addFee!)}' : ''}',
     style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
   );
@@ -175,7 +179,7 @@ class _MoveFixScreenState extends State<MoveFixScreen> {
     final p = _preview;
     const label = TextStyle(fontWeight: FontWeight.w600);
     return Scaffold(
-      appBar: AppBar(title: const Text('Fix moves between your SIMs')),
+      appBar: AppBar(title: const Text('Fix moves between your accounts')),
       body: _error != null
           ? Center(child: Text(_error!))
           : p == null
@@ -194,6 +198,7 @@ class _MoveFixScreenState extends State<MoveFixScreen> {
                 Text(
                   'Ready: ${p.changes.length} '
                   '(${p.count(MoveKind.betweenSims)} between your SIMs, '
+                  '${p.count(MoveKind.intoBank)} into Equity, '
                   '${p.count(MoveKind.cashWithdrawal)} cash withdrawals)',
                   key: const Key('move-ready'),
                   style: label,

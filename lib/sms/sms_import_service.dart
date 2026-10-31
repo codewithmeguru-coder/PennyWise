@@ -41,7 +41,14 @@ class SmsImportService extends ChangeNotifier {
     required this._save,
     this._rules = _noRules,
     this._accounts = _noAccounts,
+    this._isSaved = _neverSaved,
   });
+
+  static bool _neverSaved(String id) => false;
+
+  /// Whether a transaction with this id is already saved (e.g. the M-Pesa
+  /// record of a top-up into Equity).
+  final bool Function(String id) _isSaved;
 
   static AccountResolver? _noAccounts() => null;
 
@@ -224,6 +231,29 @@ class SmsImportService extends ChangeNotifier {
       simSlot: sms.simSlot,
       accounts: _accounts(),
     );
+    if (parsed.source == TransactionSource.equity) {
+      // A card payment abroad: the SMS has no KES amount, so it waits for
+      // the user instead of being guessed.
+      if (parsed.currency != 'KES') {
+        await _recordSkipped(SkipReason.foreignCurrency, key);
+        return null;
+      }
+      // Money the user moved in from their own M-Pesa / Airtel: that side
+      // is already saved under the same code, so a second record would
+      // count it twice. Settings › Fix moves between your accounts turns it into a
+      // move between the two accounts, after a preview.
+      final via = parsed.viaMobileMoney;
+      if (via != null &&
+          (_isSaved('mpesa_$via') || _isSaved('airtel_$via'))) {
+        await _recordSkipped(SkipReason.bankTopUp, key);
+        return null;
+      }
+      // No Equity account yet: held, not recorded on no account.
+      if (transaction.accountId == null) {
+        await _recordSkipped(SkipReason.bankNoAccount, key);
+        return null;
+      }
+    }
     final autoFuliza = parsed.kind.isFuliza && await autoFulizaImport();
     if (parsed.kind.isFuliza &&
         (!autoFuliza ||
@@ -273,6 +303,9 @@ class SmsImportService extends ChangeNotifier {
     final type = t.type;
     if (t.kind.isFuliza) {
       return _fuliza(t, simSlot: simSlot, accounts: accounts);
+    }
+    if (t.source == TransactionSource.equity) {
+      return _bank(t, rules: rules, accounts: accounts);
     }
     final isCashMove = type == TransactionType.transfer;
     final details = [
@@ -380,6 +413,51 @@ class SmsImportService extends ChangeNotifier {
     );
   }
 
+  /// An Equity Bank SMS about the user's own account: on their Equity
+  /// account (none: left unset, and the import holds it). A withdrawal
+  /// moves money from the bank to Cash; a bank charge is a fee.
+  static TransactionModel _bank(
+    SmsTransaction t, {
+    Map<String, CategoryRule> rules = const {},
+    AccountResolver? accounts,
+  }) {
+    final type = t.type;
+    final bankId = accounts?.bank(AccountProvider.equity)?.id;
+    final isCashMove = t.kind == SmsTransactionKind.withdrawal;
+    final cashId =
+        (accounts?.firstOf(AccountKind.cash) ??
+                accounts?.firstOf(AccountKind.cash, includeHidden: true))
+            ?.id;
+    final smsText = t.maskedText.length > 1000
+        ? t.maskedText.substring(0, 1000)
+        : t.maskedText;
+    // A move needs both sides; otherwise neither is set.
+    final (String? accountId, String? toAccountId) = bankId == null
+        ? (null, null)
+        : isCashMove
+        ? (cashId == null ? (null, null) : (bankId, cashId))
+        : (bankId, null);
+    return TransactionModel(
+      description: _description(t),
+      amount: t.amount,
+      type: type,
+      categoryId: t.kind == SmsTransactionKind.charge
+          ? 'fees'
+          : DefaultCategories.hasFixedCategory(type)
+          ? DefaultCategories.fixedCategoryFor(type)
+          : SmsCategorizer.categorize(t, rules: rules),
+      date: t.date,
+      source: t.source,
+      reference: t.reference,
+      smsText: smsText,
+      account: Account.bank,
+      toAccount: isCashMove ? Account.cash : null,
+      fee: (t.fee ?? 0) > 0 ? t.fee : null,
+      accountId: accountId,
+      toAccountId: toAccountId,
+    );
+  }
+
   static String _description(SmsTransaction t) {
     // Agent names say little about the transaction; the note keeps them.
     if (t.kind == SmsTransactionKind.withdrawal) return 'Cash withdrawal';
@@ -407,6 +485,7 @@ class SmsImportService extends ChangeNotifier {
       SmsTransactionKind.payment => '${t.source.label} payment',
       SmsTransactionKind.fulizaDraw => 'Fuliza loan',
       SmsTransactionKind.fulizaRepayment => 'Fuliza repayment',
+      SmsTransactionKind.charge => '${t.source.label} charge',
     };
   }
 
