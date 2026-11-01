@@ -16,7 +16,7 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   // Firebase Auth's own minimum.
-  static const _minPasswordLength = 6;
+  static const _minPasswordLength = 8;
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();

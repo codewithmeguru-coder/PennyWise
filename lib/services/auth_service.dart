@@ -434,7 +434,7 @@ class FirebaseAuthService implements AuthService {
       case 'email-already-in-use':
         return 'An account already exists for that email.';
       case 'weak-password':
-        return 'Please choose a stronger password (at least 6 characters).';
+        return 'Please choose a stronger password (at least 8 characters).';
       // The project's password policy (Firebase console) can be stricter.
       case 'password-does-not-meet-requirements':
         return "That password doesn't meet the requirements. Try a longer "

@@ -5,27 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Delete your PennyWise account</title>
 <meta name="robots" content="noindex">
-<style>
-  :root { --bg:#f6f8f7; --card:#fff; --text:#1c2421; --muted:#6b7772; --line:#e3e8e5; --green:#1b8a5a; --red:#d64545; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0f1513; --card:#1a2220; --text:#e6ece9; --muted:#a3b0aa; --line:#2e3935; --green:#2fa872; --red:#ff7b72; } }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
-  h1 { font-size: 1.5rem; margin: 0 0 8px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin:16px 0; }
-  .muted { color: var(--muted); }
-  .warn { color: var(--red); font-weight: 600; }
-  button { font: inherit; border:0; border-radius:10px; padding:12px 16px; cursor:pointer; width:100%; margin-top:8px; }
-  button.primary { background:var(--green); color:#fff; }
-  button.outline { background:transparent; color:var(--text); border:1px solid var(--muted); }
-  button.danger { background:var(--red); color:#fff; }
-  button:disabled { opacity:.45; cursor:not-allowed; }
-  input[type=email], input[type=password], input[type=text] { width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font:inherit; margin-top:6px; }
-  label { display:block; margin-top:12px; }
-  ul { padding-left: 20px; }
-  .hidden { display:none; }
-  #status { margin-top:12px; }
-</style>
+<link rel="stylesheet" href="/delete-account/page.css">
 </head>
 <body>
 <main>
@@ -69,75 +49,6 @@
   <p class="muted">Can't sign in any more? Use "Forgot password" in the app, then come back. Questions: <a href="mailto:doe68196@gmail.com" id="contact">doe68196@gmail.com</a>. Email can't be used to delete an account: signing in above is what proves it's yours.</p>
 </main>
 
-<script type="module">
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, onAuthStateChanged, signOut, deleteUser } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-  import { getFirestore, collection, doc, getDocs, query, limit, writeBatch, setDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-  // Absolute: the page is served at /delete-account (no trailing slash).
-  import { canDelete, deleteEverything } from '/delete-account/deletion.mjs';
-
-  const app = initializeApp({"apiKey": "AIzaSyBUkPTv_nRPfFKTqq82g_tVqO6fDTWS5KU", "appId": "1:240925304261:web:5265f292d706c9d80997ac", "messagingSenderId": "240925304261", "projectId": "pennywise-b986a", "authDomain": "pennywise-b986a.firebaseapp.com"});
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  const $ = (id) => document.getElementById(id);
-  const say = (t) => { $('status').textContent = t; };
-
-  function refresh() {
-    $('delete').disabled = !canDelete({ signedIn: !!auth.currentUser, understood: $('understood').checked, typed: $('word').value });
-  }
-  ['understood', 'word'].forEach((id) => $(id).addEventListener('input', refresh));
-
-  onAuthStateChanged(auth, (user) => {
-    $('signin').classList.toggle('hidden', !!user);
-    $('confirm').classList.toggle('hidden', !user);
-    $('who').textContent = user ? (user.email || 'your account') : '';
-    refresh();
-  });
-
-  $('google').onclick = async () => {
-    try { say(''); await signInWithPopup(auth, new GoogleAuthProvider()); }
-    catch (e) { say('Google sign-in failed. Please try again.'); }
-  };
-  $('emailSignIn').onclick = async () => {
-    try { say(''); await signInWithEmailAndPassword(auth, $('email').value.trim(), $('password').value); }
-    catch (e) { say('Incorrect email or password.'); }
-  };
-  $('signout').onclick = () => signOut(auth);
-
-  $('delete').onclick = async () => {
-    const user = auth.currentUser;
-    if (!user || !confirm('Delete your PennyWise account and all its data now? This can\'t be undone.')) return;
-    $('delete').disabled = true;
-    const home = doc(db, 'users', user.uid);
-    const marker = doc(db, 'users', user.uid, 'deletionRequest', 'current');
-    try {
-      await deleteEverything({
-        markDeletion: () => setDoc(marker, { requestedAt: serverTimestamp() }),
-        deleteSome: async (c) => {
-          const snap = await getDocs(query(collection(home, c), limit(200)));
-          if (snap.empty) return 0;
-          const batch = writeBatch(db);
-          snap.docs.forEach((d) => batch.delete(d.ref));
-          await batch.commit();
-          return snap.size;
-        },
-        deleteDoc: (path) => deleteDoc(doc(home, ...path.split('/'))),
-        clearMarker: () => deleteDoc(marker),
-        deleteProfile: () => deleteDoc(home),
-        deleteSignIn: () => deleteUser(user),
-      }, (step) => say(step + '…'));
-      $('confirm').classList.add('hidden');
-      $('signin').classList.add('hidden');
-      $('done').classList.remove('hidden');
-      say('');
-    } catch (e) {
-      const recent = e && e.code === 'auth/requires-recent-login';
-      say(recent
-        ? 'Your data is deleted. Sign out, sign in again and press Delete once more to remove the sign-in too.'
-        : 'Deletion stopped (' + (e && e.code ? e.code : 'error') + '). Nothing is lost by trying again; it continues where it stopped.');
-      refresh();
-    }
-  };
-</script>
+<script type="module" src="/delete-account/page.mjs"></script>
 </body>
 </html>

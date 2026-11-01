@@ -59,6 +59,22 @@ test('the page shows the support email and has no placeholders left', async () =
   const html = await readFile(new URL('../../hosting/delete-account/index.html', import.meta.url), 'utf8');
   assert.match(html, /<a href="mailto:doe68196@gmail\.com" id="contact">doe68196@gmail\.com<\/a>/);
   assert.doesNotMatch(html, /\[CONFIRM|__[A-Z_]+__/);
+  // No inline script or style: the Content-Security-Policy forbids them.
+  assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>|<style|\sstyle=|\son[a-z]+=/i);
+  assert.match(html, /<script type="module" src="\/delete-account\/page\.mjs">/);
+  const js = await readFile(new URL('../../hosting/delete-account/page.mjs', import.meta.url), 'utf8');
   // Served at /delete-account, so a relative import would miss the file.
-  assert.match(html, /from '\/delete-account\/deletion\.mjs'/);
+  assert.match(js, /from '\/delete-account\/deletion\.mjs'/);
+});
+
+test('the Content-Security-Policy allows only what the page uses', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const cfg = JSON.parse(await readFile(new URL('../../firebase.json', import.meta.url), 'utf8'));
+  const csp = cfg.hosting.headers
+    .flatMap((h) => h.headers)
+    .find((h) => h.key === 'Content-Security-Policy').value;
+  assert.match(csp, /default-src 'none'/);
+  assert.match(csp, /script-src 'self' https:\/\/www\.gstatic\.com/);
+  assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval|\*(?!\.googleapis\.com)/);
+  assert.match(csp, /frame-ancestors 'none'/);
 });

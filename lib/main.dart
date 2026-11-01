@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'app.dart';
 import 'firebase_options.dart';
+import 'security/app_check_setup.dart';
 import 'utils/orientation.dart';
 
 Future<void> main() async {
@@ -15,6 +16,10 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // App Check before Auth or Firestore send their first request (Play
+  // Integrity in release builds; the debug provider only in debug builds).
+  await AppCheckSetup.activate();
 
   runApp(const PennyWiseApp());
 }
