@@ -13,7 +13,7 @@
 | Login at narrow widths | Tested at 280, 320 and 393, light and dark. |
 | SMS disclosure | Updated to name Equity Bank and the SIM. |
 | Account deletion | Built: in the app and as a web page (`docs/play/account-deletion.md`). **Needs the rules and page deployed** (your approval). |
-| Privacy policy | Draft in `privacy-policy.md`; needs your details, then publishing at a public URL. |
+| Privacy policy | Working draft in `privacy-policy.md`, and the matching page in `hosting/privacy/` for https://pennywise-b986a.web.app/privacy. Needs your details (the [CONFIRM] items), then deploying. |
 
 ## Upload key vs Play App Signing key
 - **Upload key:** you create it and keep it. You sign every bundle you upload with it. Its SHA-1 goes into Firebase, so builds you sign yourself can use Google sign-in.

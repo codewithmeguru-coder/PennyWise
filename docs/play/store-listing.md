@@ -4,7 +4,7 @@
 **Category:** Finance
 **Tags:** Budgeting, Personal finance, Expense tracker
 **Contact email:** doe68196@gmail.com
-**Privacy policy URL:** [CONFIRM after publishing `privacy-policy.md`]
+**Privacy policy URL:** [CONFIRM after publishing] Intended: https://pennywise-b986a.web.app/privacy (prepared in `hosting/privacy/`, not yet deployed)
 
 ## Short description (≤ 80 characters)
 Track M-Pesa, Airtel Money & Equity spending automatically. Budget with ease.
