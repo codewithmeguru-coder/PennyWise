@@ -6,10 +6,14 @@
 // The "demo-" project id keeps the emulator from ever reaching a real
 // project. No npm packages: plain REST calls with unsigned emulator tokens.
 
+import { withClaim } from './limit.mjs';
 const HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 const PROJECT = process.env.GCLOUD_PROJECT || 'demo-pennywise';
 const DOCS = `projects/${PROJECT}/databases/(default)/documents`;
 const BASE = `http://${HOST}/v1/${DOCS}`;
+// Every commit carries the daily and edit claims the app makes.
+import { autoClaim } from './limit.mjs';
+autoClaim({ BASE, DOCS });
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const token = (uid) =>
@@ -38,14 +42,14 @@ async function write(uid, path, data, { create = false } = {}) {
     method: 'POST',
     headers: headers(uid),
     body: JSON.stringify({
-      writes: [{
+      writes: await (create ? (w) => withClaim({ BASE, DOCS }, path, w) : async (w) => w)([{
         update: { name: `${DOCS}/${path}`, fields: fields(data) },
         updateTransforms: [
           ...(create ? [{ fieldPath: 'createdAt', setToServerValue: 'REQUEST_TIME' }] : []),
           { fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' },
         ],
         ...(create ? { currentDocument: { exists: false } } : { updateMask: { fieldPaths: Object.keys(data) } }),
-      }],
+      }]),
     }),
   });
   await res.text();

@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../data/write_limit.dart';
+
 /// The signed-in user, as the rest of the app sees them.
 ///
 /// Screens use this instead of Firebase's [User] so they (and tests) don't
@@ -386,12 +388,27 @@ class FirebaseAuthService implements AuthService {
         'photoUrl': user.photoURL, // from Google; null for email accounts
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      final snapshot = await ref.get();
-      if (snapshot.exists) {
-        await ref.update(profile);
-      } else {
-        await ref.set({...profile, 'createdAt': FieldValue.serverTimestamp()});
-      }
+      // Each save claims one from today's edit limit, in the same write.
+      await _firestore.runTransaction((tx) async {
+        final snapshot = await tx.get(ref);
+        final saved = snapshot.data();
+        if (saved != null &&
+            saved['email'] == profile['email'] &&
+            saved['displayName'] == profile['displayName'] &&
+            saved['photoUrl'] == profile['photoUrl']) {
+          return; // unchanged: signing in again writes (and claims) nothing
+        }
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounter(_firestore, user.uid),
+          'profile',
+        );
+        if (snapshot.exists) {
+          tx.update(ref, profile);
+        } else {
+          tx.set(ref, {...profile, 'createdAt': FieldValue.serverTimestamp()});
+        }
+      });
     } catch (e) {
       debugPrint('Could not save user profile: $e');
     }

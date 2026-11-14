@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/custom_category.dart';
 import '../models/transaction_model.dart';
 import 'data_exception.dart';
+import 'write_limit.dart';
 
 /// Read / write one user's own categories. There is no delete: a category
 /// is deactivated instead, so past records always find it.
@@ -70,6 +71,12 @@ class FirestoreCategoryRepository implements CategoryRepository {
         if ((await tx.get(ref)).exists) {
           throw const DataException('That category id is taken. Try again.');
         }
+        // A new category claims one from today's write limit.
+        await WriteLimit.claim(
+          tx,
+          WriteLimit.counterOf(_collection),
+          'categories/${category.id}',
+        );
         tx.set(ref, {
           'name': category.name,
           'type': category.type.wireName,
@@ -88,13 +95,23 @@ class FirestoreCategoryRepository implements CategoryRepository {
 
   @override
   Future<void> update(CustomCategory category) async {
+    final ref = _collection.doc(category.id);
     try {
-      await _collection.doc(category.id).update({
-        'name': category.name,
-        'icon': category.icon,
-        'active': category.active,
-        'updatedAt': FieldValue.serverTimestamp(),
+      await _db.runTransaction((tx) async {
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_collection),
+          'categories/${category.id}',
+        );
+        tx.update(ref, {
+          'name': category.name,
+          'icon': category.icon,
+          'active': category.active,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       });
+    } on DataException {
+      rethrow;
     } catch (e) {
       throw DataException.from(e);
     }

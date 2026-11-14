@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../data/data_exception.dart';
+import '../data/write_limit.dart';
 import 'anchor_log.dart';
 import 'money_account.dart';
 
@@ -74,6 +75,11 @@ class FirestoreAccountRepository implements AccountRepository {
       await _collection.firestore.runTransaction((tx) async {
         final existing = await tx.get(doc);
         if (existing.exists) {
+          await WriteLimit.claimEdit(
+            tx,
+            WriteLimit.editCounterOf(_collection),
+            'accounts/${doc.id}',
+          );
           tx.update(doc, {
             ..._fields(account),
             // update() merges: clear optional fields the user removed.
@@ -82,10 +88,7 @@ class FirestoreAccountRepository implements AccountRepository {
             if (account.openingDate == null) 'openingDate': FieldValue.delete(),
           });
         } else {
-          tx.set(doc, {
-            ..._fields(account),
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+          await _create(tx, account);
         }
       });
     } catch (e) {
@@ -93,20 +96,35 @@ class FirestoreAccountRepository implements AccountRepository {
     }
   }
 
+  /// Creates [account] in [tx], claiming one new record from today's write
+  /// limit (call after the transaction's other reads).
+  Future<void> _create(Transaction tx, MoneyAccount account) async {
+    await WriteLimit.claim(
+      tx,
+      WriteLimit.counterOf(_collection),
+      'accounts/${account.id}',
+    );
+    tx.set(_collection.doc(account.id), {
+      ..._fields(account),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   @override
   Future<void> createMissing(List<MoneyAccount> accounts) async {
     try {
-      await _collection.firestore.runTransaction((tx) async {
-        final docs = [for (final a in accounts) _collection.doc(a.id)];
-        final existing = [for (final d in docs) await tx.get(d)];
-        for (var i = 0; i < accounts.length; i++) {
-          if (existing[i].exists) continue;
-          tx.set(docs[i], {
-            ..._fields(accounts[i]),
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
-      });
+      // One account per Firestore transaction, as each new account claims
+      // its own write. Stopping halfway is safe: running it again creates
+      // only the ones still missing.
+      for (final account in accounts) {
+        final doc = _collection.doc(account.id);
+        await _collection.firestore.runTransaction((tx) async {
+          if ((await tx.get(doc)).exists) return;
+          await _create(tx, account);
+        });
+      }
+    } on DataException {
+      rethrow;
     } catch (e) {
       throw DataException.from(e);
     }
@@ -195,6 +213,15 @@ class FirestoreAccountRepository implements AccountRepository {
           return false; // already saved (e.g. a retry)
         }
         final previous = existing.data();
+        // The account update claims one edit, and the new history record
+        // one new record (two counters, one claim each).
+        await WriteLimit.claimEditAndNew(
+          tx,
+          editCounter: WriteLimit.editCounterOf(_collection),
+          editPath: 'accounts/${doc.id}',
+          counter: WriteLimit.counterOf(_collection),
+          newPath: 'balanceAnchors/${change.id}',
+        );
         tx.update(doc, _updateFields(updated));
         tx.set(
           _anchors.doc(change.id),
@@ -233,6 +260,11 @@ class FirestoreAccountRepository implements AccountRepository {
             !_holds(account.data(), change.after, change.afterDate)) {
           return false; // undone already, or changed since
         }
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_collection),
+          'accounts/${doc.id}',
+        );
         tx.update(doc, _updateFields(restored));
         tx.update(anchor, {
           'undone': true,

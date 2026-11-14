@@ -2,7 +2,7 @@
 // Content-Security-Policy can forbid inline scripts).
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, onAuthStateChanged, signOut, deleteUser } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, collection, doc, getDocs, query, limit, writeBatch, setDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getFirestore, collection, doc, getDoc, getDocs, query, limit, writeBatch, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 // Absolute: the page is served at /delete-account (no trailing slash).
 import { canDelete, deleteEverything } from '/delete-account/deletion.mjs';
 
@@ -52,6 +52,21 @@ $('delete').onclick = async () => {
         return snap.size;
       },
       deleteDoc: (path) => deleteDoc(doc(home, ...path.split('/'))),
+      clearWriteCounter: async () => {
+        // The daily write and edit counters.
+        for (const name of ['daily', 'edits']) {
+          const counter = doc(home, 'limits', name);
+          if (!(await getDoc(counter)).exists()) continue;
+          try {
+            await deleteDoc(counter);
+          } catch (e) {
+            if (!e || e.code !== 'permission-denied') throw e;
+            // Today's counter stays so the daily limit can't be reset; only
+            // the last record's path is removed.
+            await updateDoc(counter, { lastPath: '' });
+          }
+        }
+      },
       clearMarker: () => deleteDoc(marker),
       deleteProfile: () => deleteDoc(home),
       deleteSignIn: () => deleteUser(user),

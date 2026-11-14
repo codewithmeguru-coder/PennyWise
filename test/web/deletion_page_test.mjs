@@ -24,6 +24,7 @@ function fakeStore(failOnce) {
       const n = Math.min(200, data[c]); data[c] -= n; return n;
     },
     async deleteDoc() { s.photo = false; },
+    async clearWriteCounter() { assert.equal(s.marker, true); s.counter = false; },
     async clearMarker() { assert.ok(Object.values(data).every((n) => n === 0)); s.log.push('clear'); s.marker = false; },
     async deleteProfile() { s.profile = false; },
     async deleteSignIn() { s.signIn = false; },
@@ -38,6 +39,7 @@ test('deletes every collection, then the request, profile and sign-in', async ()
   assert.ok(Object.values(s.data).every((n) => n === 0));
   assert.deepEqual(s.log, ['mark', 'clear']);
   assert.equal(s.photo, false);
+  assert.equal(s.counter, false);
   assert.equal(s.profile, false);
   assert.equal(s.signIn, false);
 });
@@ -77,4 +79,17 @@ test('the Content-Security-Policy allows only what the page uses', async () => {
   assert.match(csp, /script-src 'self' https:\/\/www\.gstatic\.com/);
   assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval|\*(?!\.googleapis\.com)/);
   assert.match(csp, /frame-ancestors 'none'/);
+});
+
+test('the page discloses the usage counters that may remain, in the app\'s words', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../../hosting/delete-account/index.html', import.meta.url), 'utf8');
+  const text = html.replace(/&#39;/g, "'");
+  assert.ok(text.includes(
+    "If anything was added or changed in your account on the day you delete it, small usage counters containing only a number and timestamp may remain under your deleted account's ID. They contain no financial transaction details and cannot be accessed through PennyWise."));
+  // And it clears both counters (deleted, or today's cleared of its path),
+  // claiming nothing.
+  const js = await readFile(new URL('../../hosting/delete-account/page.mjs', import.meta.url), 'utf8');
+  assert.match(js, /for \(const name of \['daily', 'edits'\]\)/);
+  assert.match(js, /updateDoc\(counter, \{ lastPath: '' \}\)/);
 });

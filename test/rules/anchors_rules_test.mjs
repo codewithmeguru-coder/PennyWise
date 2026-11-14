@@ -11,6 +11,9 @@ const PROJECT = process.env.GCLOUD_PROJECT || 'demo-pennywise';
 if (!PROJECT.startsWith('demo-')) throw new Error('Emulator demo project only');
 const DOCS = `projects/${PROJECT}/databases/(default)/documents`;
 const BASE = `http://${HOST}/v1/${DOCS}`;
+// Every commit carries the daily and edit claims the app makes.
+import { autoClaim } from './limit.mjs';
+autoClaim({ BASE, DOCS });
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const token = (uid) =>
@@ -146,7 +149,9 @@ expect('account change + invalid record (wrong currency) in one commit', await c
 check('the account was not changed by it', await field('nia', SIM, 'openingBalance') === 900);
 check('and no record was created', await read('nia', `${N}/r5`) === 404);
 
-// ---- Every account type, created together with its record ----------------
+// ---- Every account type: created, then given its starting balance and record
+// (as the app does; a new account and its first record in one request would
+// need two new-record claims, see account_creation_rules_test.mjs) ----------
 for (const [id, a, amount] of [
   ['equity-test', account('Equity', 'bank', 'equity'), 2500],
   ['cash-test', account('Cash', 'cash', 'none'), 300],
@@ -154,8 +159,12 @@ for (const [id, a, amount] of [
   ['fuliza-test', account('Fuliza (SIM 2)', 'loan', 'safaricom', { simSlot: 1, parentId: 'mpesa-sim2' }), -180.57],
   ['hidden-test', account('Old line', 'mobile_money', 'safaricom', { active: false }), 0],
 ]) {
-  expect(`${a.kind}${a.active ? '' : ' (hidden)'}: new account with its starting balance and record`, await commit('nia', [
-    create(`${A}/${id}`, { ...a, openingBalance: amount, openingDate: day }, ['createdAt', 'updatedAt']),
+  const label = `${a.kind}${a.active ? '' : ' (hidden)'}`;
+  expect(`${label}: new account`, await commit('nia', [
+    create(`${A}/${id}`, a, ['createdAt', 'updatedAt']),
+  ]), true);
+  expect(`${label}: its starting balance and record`, await commit('nia', [
+    setOpening(`${A}/${id}`, amount, day),
     create(`${N}/t-${id}`, { ...base, accountId: id, amount, effectiveAt: day }),
   ]), true);
 }

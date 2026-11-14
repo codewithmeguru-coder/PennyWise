@@ -44,6 +44,67 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/users/$(userId)/deletionRequest/current);
     }
 
+    // ---- Daily write and edit limits ---------------------------------------
+    // Every new transaction, learned category, custom category, account or
+    // balance history record must "claim" the owner's counter at users/{uid}/limits/daily in the SAME
+    // request: the counter goes up by exactly one, records the new
+    // document's path, and is stamped with the request time. A request can
+    // write the counter only once, so it can create only one such document,
+    // and the counter can't pass dailyWriteLimit() in one UTC day. Writing
+    // straight to Firestore doesn't get around it: the rules check it.
+    //
+    // Edits work the same way with a second counter, users/{uid}/limits/edits
+    // (claimsEdit, dailyEditLimit()): every update of the profile, a
+    // transaction, learned category, account or category, and every save of
+    // a budget, category limit or profile photo. Deletes aren't counted
+    // (only what was created, itself limited, can be deleted).
+    function dailyWriteLimit() {
+      return 1500;
+    }
+
+    function dailyEditLimit() {
+      return 3000;
+    }
+
+    function limitOf(name) {
+      return name == 'daily' ? dailyWriteLimit() : dailyEditLimit();
+    }
+
+    function utcDay(t) {
+      return int(t.toMillis() / 86400000);
+    }
+
+    function limitPath(userId, name) {
+      return /databases/$(database)/documents/users/$(userId)/limits/$(name);
+    }
+
+    // What counter [name] must be after this request: one more than
+    // today's value, or 1 on a new day (or the first time).
+    function nextCount(userId, name) {
+      return exists(limitPath(userId, name))
+          && utcDay(get(limitPath(userId, name)).data.at) == utcDay(request.time)
+        ? get(limitPath(userId, name)).data.count + 1
+        : 1;
+    }
+
+    function claimsCounter(userId, name, path) {
+      return existsAfter(limitPath(userId, name))
+        && getAfter(limitPath(userId, name)).data.lastPath == path
+        && getAfter(limitPath(userId, name)).data.at == request.time
+        && getAfter(limitPath(userId, name)).data.count == nextCount(userId, name);
+    }
+
+    // A new document ([path] is e.g. "transactions/abc").
+    function claimsLimit(userId, path) {
+      return claimsCounter(userId, 'daily', path);
+    }
+
+    // An edit of an existing document (or a save of a budget, category
+    // limit, photo or profile, which may create it).
+    function claimsEdit(userId, path) {
+      return claimsCounter(userId, 'edits', path);
+    }
+
     // ---- users/{uid} -----------------------------------------------------
 
     function isValidProfile(data) {
@@ -68,10 +129,12 @@ service cloud.firestore {
       allow read, delete: if isOwner(userId);
       allow create: if isOwner(userId)
         && isValidProfile(request.resource.data)
-        && stampedNow('createdAt') && stampedNow('updatedAt');
+        && stampedNow('createdAt') && stampedNow('updatedAt')
+        && claimsEdit(userId, 'profile');
       allow update: if isOwner(userId)
         && isValidProfile(request.resource.data)
-        && createdAtUnchanged() && stampedNow('updatedAt');
+        && createdAtUnchanged() && stampedNow('updatedAt')
+        && claimsEdit(userId, 'profile');
 
       // ---- users/{uid}/transactions/{transactionId} ----------------------
 
@@ -200,11 +263,13 @@ service cloud.firestore {
         allow create: if isOwner(userId)
           && isValidTransaction(request.resource.data)
           && !('reclassifiedFrom' in request.resource.data)
-          && stampedNow('createdAt') && stampedNow('updatedAt');
+          && stampedNow('createdAt') && stampedNow('updatedAt')
+          && claimsLimit(userId, 'transactions/' + transactionId);
         allow update: if isOwner(userId)
           && isValidTransaction(request.resource.data)
           && reclassificationOk()
-          && createdAtUnchanged() && stampedNow('updatedAt');
+          && createdAtUnchanged() && stampedNow('updatedAt')
+          && claimsEdit(userId, 'transactions/' + transactionId);
       }
 
       // ---- users/{uid}/categoryRules/{ruleId} ----------------------------
@@ -234,10 +299,12 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create: if isOwner(userId)
           && isValidRule(request.resource.data, ruleId)
-          && stampedNow('createdAt') && stampedNow('updatedAt');
+          && stampedNow('createdAt') && stampedNow('updatedAt')
+          && claimsLimit(userId, 'categoryRules/' + ruleId);
         allow update: if isOwner(userId)
           && isValidRule(request.resource.data, ruleId)
-          && createdAtUnchanged() && stampedNow('updatedAt');
+          && createdAtUnchanged() && stampedNow('updatedAt')
+          && claimsEdit(userId, 'categoryRules/' + ruleId);
       }
 
       // ---- users/{uid}/accounts/{accountId} ------------------------------
@@ -278,10 +345,12 @@ service cloud.firestore {
         allow delete: if isOwner(userId) && deleting(userId);
         allow create: if isOwner(userId)
           && isValidAccount(request.resource.data, accountId)
-          && stampedNow('createdAt') && stampedNow('updatedAt');
+          && stampedNow('createdAt') && stampedNow('updatedAt')
+          && claimsLimit(userId, 'accounts/' + accountId);
         allow update: if isOwner(userId)
           && isValidAccount(request.resource.data, accountId)
-          && createdAtUnchanged() && stampedNow('updatedAt');
+          && createdAtUnchanged() && stampedNow('updatedAt')
+          && claimsEdit(userId, 'accounts/' + accountId);
       }
 
       // ---- users/{uid}/balanceAnchors/{anchorId} -------------------------
@@ -356,12 +425,18 @@ service cloud.firestore {
                   request.resource.data, 'previousAmount',
                   'previousEffectiveAt')
               : !('previousAmount' in request.resource.data))
-          && stampedNow('createdAt');
+          && stampedNow('createdAt')
+          // A record whose values match the account's unchanged ones is
+          // valid too, so each one claims a new record (else they could be
+          // written without end).
+          && claimsLimit(userId, 'balanceAnchors/' + anchorId);
         // Undo is the only change: undone false -> true, stamped now, in
         // the same write that puts the account back to the previous value,
         // and only while the account still holds this record's value (an
         // old Undo can't overwrite a later change). Everything else
-        // (owner, account, amounts, times, reason) stays.
+        // (owner, account, amounts, times, reason) stays. No edit claim of
+        // its own: the account update it comes with claims one, and a
+        // record can be undone only once.
         allow update: if isOwner(userId)
           && resource.data.undone == false
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -394,7 +469,8 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
           && isValidBudget(request.resource.data, monthId)
-          && stampedNow('updatedAt');
+          && stampedNow('updatedAt')
+          && claimsEdit(userId, 'budgets/' + monthId);
       }
 
       // ---- users/{uid}/categoryBudgets/{YYYY-MM}_{categoryId} -------------
@@ -420,7 +496,8 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
           && isValidCategoryBudget(request.resource.data, budgetId)
-          && stampedNow('updatedAt');
+          && stampedNow('updatedAt')
+          && claimsEdit(userId, 'categoryBudgets/' + budgetId);
       }
 
       // ---- users/{uid}/categories/{categoryId} -----------------------------
@@ -450,15 +527,46 @@ service cloud.firestore {
           && categoryId.matches('^c_[a-z]{6,30}$')
           && isValidCategory(request.resource.data)
           && stampedNow('createdAt')
-          && stampedNow('updatedAt');
+          && stampedNow('updatedAt')
+          && claimsLimit(userId, 'categories/' + categoryId);
         allow update: if isOwner(userId)
           && isValidCategory(request.resource.data)
           && request.resource.data.type == resource.data.type
           && createdAtUnchanged()
-          && stampedNow('updatedAt');
+          && stampedNow('updatedAt')
+          && claimsEdit(userId, 'categories/' + categoryId);
         // No delete (turning off keeps old records readable), unless the
         // owner is deleting their whole account.
         allow delete: if isOwner(userId) && deleting(userId);
+      }
+
+      // ---- users/{uid}/limits/{daily, edits} --------------------------------
+      // The daily write and edit counters (see claimsLimit, claimsEdit).
+      // Fields: at (request time), count, lastPath. Each can only go up by
+      // one per request, up to its limit, and starts again at 1 on a new UTC
+      // day.
+      match /limits/{docId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && docId in ['daily', 'edits']
+          && request.resource.data.keys().hasOnly(['at', 'count', 'lastPath'])
+          && request.resource.data.at == request.time
+          && request.resource.data.count == nextCount(userId, docId)
+          && request.resource.data.count <= limitOf(docId)
+          && request.resource.data.lastPath is string
+          && request.resource.data.lastPath.size() > 0
+          && request.resource.data.lastPath.size() <= 200;
+        // Account deletion (the cleanup itself claims nothing): today's
+        // counter can't be removed (that would reset it), only cleared of
+        // the last path; an older one can go.
+        allow update: if isOwner(userId)
+          && deleting(userId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['lastPath'])
+          && request.resource.data.lastPath == '';
+        allow delete: if isOwner(userId)
+          && deleting(userId)
+          && utcDay(resource.data.at) != utcDay(request.time);
       }
 
       // ---- users/{uid}/deletionRequest/current ----------------------------
@@ -495,7 +603,8 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
           && isValidAvatar(request.resource.data)
-          && stampedNow('updatedAt');
+          && stampedNow('updatedAt')
+          && claimsEdit(userId, 'private/avatar');
       }
     }
   }

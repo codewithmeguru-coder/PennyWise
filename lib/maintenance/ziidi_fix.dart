@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../accounts/account_repository.dart';
 import '../accounts/money_account.dart';
 import '../data/data_exception.dart';
+import '../data/write_limit.dart';
 import '../sms/sms_gateway.dart';
 import 'inbox_sims.dart';
 import 'ziidi_matcher.dart';
@@ -175,6 +176,11 @@ class FirestoreZiidiFixRepository implements ZiidiFixRepository {
             now.updatedAt != r.updatedAt) {
           return false; // changed since the preview: leave it
         }
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_collection),
+          'transactions/${doc.id}',
+        );
         tx.update(doc, {
           'type': change.check.newType,
           'category': change.check.newCategory,
@@ -218,6 +224,11 @@ class FirestoreZiidiFixRepository implements ZiidiFixRepository {
         if (now.type != check.newType || now.category != check.newCategory) {
           return false; // edited after the fix: leave it
         }
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_collection),
+          'transactions/${doc.id}',
+        );
         tx.update(doc, {
           'type': marker.type,
           'category': marker.category,

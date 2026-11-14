@@ -11,10 +11,11 @@
    1. It records a deletion request at `users/{uid}/deletionRequest/current`.
    2. It deletes these collections in batches of 200: `transactions`, `categoryRules`, `budgets`, `categoryBudgets`, `balanceAnchors`, `accounts`, `categories`.
    3. It deletes `private/avatar` (the profile photo; Firebase Storage isn't used).
-   4. It removes the deletion request.
-   5. It deletes the `users/{uid}` profile.
-   6. It clears this phone's PennyWise settings for that user, and App Lock.
-   7. It deletes the Firebase sign-in itself.
+   4. It removes the usage counters `limits/daily` and `limits/edits`. A counter used today can't be removed (that would reset the daily limit), so only its last path is cleared and a number and a time stay under the deleted account's ID. The web page does the same.
+   5. It removes the deletion request.
+   6. It deletes the `users/{uid}` profile.
+   7. It clears this phone's PennyWise settings for that user, and App Lock.
+   8. It deletes the Firebase sign-in itself.
 6. The app returns to the sign-in screen and says the account was deleted.
 
 **If it stops halfway** (no connection, app closed): the deletion request stays. Opening Delete account again shows "A deletion you started didn't finish" and **Finish deleting**, which continues where it stopped, because deleting what's already gone does nothing. If only the sign-in deletion fails, the data is already gone; confirming again and retrying removes the sign-in.
@@ -49,4 +50,4 @@ Test with a throwaway test account, never your main one: register it, add a few 
 - Web link where users can request deletion without reinstalling: **done** (needs deploying).
 - Data deleted or kept is explained: on the page and in the privacy policy draft.
 - Data safety form: answer **Yes, users can request deletion** once both are live.
-- Still open: fill in the contact email, and publish the privacy policy with section 7 updated.
+- Still open: publish the privacy policy (deletion is its section 8; the page is prepared at `hosting/privacy/`, not deployed).

@@ -296,27 +296,56 @@ class _HomeShellState extends State<HomeShell> {
 
     final t = result.transaction;
     final store = widget.store;
-    final (Future<void> write, String done) = switch (result) {
+    final (Future<void> Function() write, String done) = switch (result) {
       TransactionSaved() when existing == null =>
-        (store.add(t), 'Added "${t.description}"'),
-      TransactionSaved() => (store.update(t), 'Saved changes'),
+        (() => store.add(t), 'Added "${t.description}"'),
+      TransactionSaved() => (() => store.update(t), 'Saved changes'),
       TransactionDeleted() ||
       TransactionOpenExisting() =>
         throw StateError('handled above'),
     };
 
-    // The list updates straight away from Firestore's local cache, so confirm
-    // now; if the server later rejects the write, show why.
-    _showMessage(done);
-    try {
-      await write;
-    } on DataException catch (e) {
-      _showMessage(e.message);
-      return;
-    }
+    // Saves count against the daily limits in a Firestore transaction,
+    // which needs the server: confirm only once it's saved. If it fails
+    // (offline, or a limit), say why and keep what was entered so it can
+    // be tried again without typing it again.
+    if (!await _saveOrOfferRetry(write, done)) return;
     if (existing != null) {
       await _learnFrom(existing, t);
     }
+  }
+
+  /// Runs [write]; shows [done] once it's saved. On failure shows why, with
+  /// "Try again" (repeatable) that runs the same write. True if the first
+  /// attempt saved.
+  Future<bool> _saveOrOfferRetry(
+      Future<void> Function() write, String done) async {
+    try {
+      await write();
+    } on DataException catch (e) {
+      _offerRetry(e.message, write, done);
+      return false;
+    }
+    _showMessage(done);
+    return true;
+  }
+
+  void _offerRetry(
+      String message, Future<void> Function() write, String done) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        // A new key each time, so after another failure "Try again" is a
+        // fresh, enabled button.
+        key: UniqueKey(),
+        content: Text('Not saved. $message'),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Try again',
+          onPressed: () => _saveOrOfferRetry(write, done),
+        ),
+      ));
   }
 
   /// Needs review: saves [before] with only its category changed, then

@@ -86,6 +86,60 @@ void main() {
     expect(find.text('Groceries'), findsOneWidget);
   });
 
+  testWidgets('A failed save (offline) says so, saves nothing, and "Try '
+      'again" saves what was entered', (WidgetTester tester) async {
+    final repo = await pumpApp(tester, repository: FakeTransactionRepository());
+    repo.failWrites = 2;
+
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Amount'), '300');
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Description'), 'Taxi');
+    await scrollAndTap(tester, 'Transport');
+    await scrollAndTap(tester, 'Save transaction');
+
+    // No false "Added": the failure, with a retry, and nothing saved.
+    expect(repo.items, isEmpty);
+    expect(find.textContaining('Added'), findsNothing);
+    expect(find.text('Not saved. ${FakeTransactionRepository.offline}'),
+        findsOneWidget);
+
+    // Still offline: says so again, still offering to retry.
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(repo.items, isEmpty);
+    expect(find.text('Try again'), findsOneWidget);
+
+    // Back online: the same entry is saved, without typing it again.
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(repo.items.single.description, 'Taxi');
+    expect(repo.items.single.amount, 300);
+    expect(find.text('Added "Taxi"'), findsOneWidget);
+  });
+
+  testWidgets('A failed edit keeps the old values and can be retried',
+      (WidgetTester tester) async {
+    final repo = await pumpApp(tester);
+    repo.failWrites = 1;
+
+    await scrollAndTap(tester, 'Lunch');
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Description'), 'Team lunch');
+    await scrollAndTap(tester, 'Save changes');
+
+    expect(repo.items.firstWhere((t) => t.id == 't1').description, 'Lunch');
+    expect(find.text('Saved changes'), findsNothing);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(repo.items.firstWhere((t) => t.id == 't1').description,
+        'Team lunch');
+    expect(find.text('Saved changes'), findsOneWidget);
+  });
+
   testWidgets('Amount allows at most 2 decimal places',
       (WidgetTester tester) async {
     await pumpApp(tester, repository: FakeTransactionRepository());

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/transaction_model.dart';
 import 'data_exception.dart';
+import 'write_limit.dart';
 
 /// Create / read / update / delete for one user's transactions.
 abstract class TransactionRepository {
@@ -56,10 +57,19 @@ class FirestoreTransactionRepository implements TransactionRepository {
   @override
   Future<String> add(TransactionModel transaction) async {
     final doc = _collection.doc(); // id generated client-side
-    await _guard(() => doc.set({
-          ..._fields(transaction),
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
+    // Claims one from today's write limit in the same Firestore transaction
+    // (the rules require it for every new transaction).
+    await _guard(() => _collection.firestore.runTransaction((tx) async {
+          await WriteLimit.claim(
+            tx,
+            WriteLimit.counterOf(_collection),
+            'transactions/${doc.id}',
+          );
+          tx.set(doc, {
+            ..._fields(transaction),
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
         }));
     return doc.id;
   }
@@ -75,6 +85,11 @@ class FirestoreTransactionRepository implements TransactionRepository {
       return await _collection.firestore.runTransaction((tx) async {
         final existing = await tx.get(doc);
         if (existing.exists) return false;
+        await WriteLimit.claim(
+          tx,
+          WriteLimit.counterOf(_collection),
+          'transactions/$dedupeKey',
+        );
         tx.set(doc, {
           ..._fields(transaction),
           'createdAt': FieldValue.serverTimestamp(),
@@ -90,13 +105,23 @@ class FirestoreTransactionRepository implements TransactionRepository {
   @override
   Future<void> update(TransactionModel transaction) {
     final fields = _fields(transaction);
-    return _guard(() => _collection.doc(transaction.id).update({
-          ...fields,
-          // update() merges, so clearing an optional field needs an explicit
-          // delete (e.g. a transfer edited into an expense drops toAccount).
-          for (final field in _optionalFields)
-            if (!fields.containsKey(field)) field: FieldValue.delete(),
-          'updatedAt': FieldValue.serverTimestamp(),
+    final doc = _collection.doc(transaction.id);
+    // Each edit claims one from today's edit limit, in the same write.
+    return _guard(() => _collection.firestore.runTransaction((tx) async {
+          await WriteLimit.claimEdit(
+            tx,
+            WriteLimit.editCounterOf(_collection),
+            'transactions/${doc.id}',
+          );
+          tx.update(doc, {
+            ...fields,
+            // update() merges, so clearing an optional field needs an
+            // explicit delete (e.g. a transfer edited into an expense drops
+            // toAccount).
+            for (final field in _optionalFields)
+              if (!fields.containsKey(field)) field: FieldValue.delete(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
         }));
   }
 

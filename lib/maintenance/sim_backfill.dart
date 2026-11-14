@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../accounts/account_repository.dart';
 import '../accounts/money_account.dart';
 import '../data/data_exception.dart';
+import '../data/write_limit.dart';
 import '../models/transaction_model.dart';
 import '../sms/sms_gateway.dart';
 import 'account_assignment.dart';
@@ -162,6 +163,11 @@ class FirestoreSimBackfillRepository implements SimBackfillRepository {
             now.updatedAt != r.updatedAt) {
           return false; // changed since the preview: leave it
         }
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_collection),
+          'transactions/${doc.id}',
+        );
         tx.update(doc, {
           'accountId': change.accountId,
           if (change.toAccountId != null) 'toAccountId': change.toAccountId,
@@ -195,6 +201,11 @@ class FirestoreSimBackfillRepository implements SimBackfillRepository {
             now.category != category) {
           return false; // edited since: leave it
         }
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_collection),
+          'transactions/${doc.id}',
+        );
         tx.update(doc, {
           'accountId': FieldValue.delete(),
           if (toAccountId != null) 'toAccountId': FieldValue.delete(),

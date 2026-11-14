@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../data/data_exception.dart';
 import '../models/transaction_model.dart';
 import 'category_rule.dart';
+import '../data/write_limit.dart';
 
 /// Read / write one user's learned category rules.
 abstract class CategoryRuleRepository {
@@ -51,8 +52,20 @@ class FirestoreCategoryRuleRepository implements CategoryRuleRepository {
         };
         if (existing.exists) {
           final count = (existing.data()?['count'] as int? ?? 0) + 1;
+          // Updating one claims one from today's edit limit.
+          await WriteLimit.claimEdit(
+            tx,
+            WriteLimit.editCounterOf(_collection),
+            'categoryRules/${rule.key}',
+          );
           tx.update(doc, {...fields, 'count': count});
         } else {
+          // A new learned category claims one from today's write limit.
+          await WriteLimit.claim(
+            tx,
+            WriteLimit.counterOf(_collection),
+            'categoryRules/${rule.key}',
+          );
           tx.set(doc, {
             ...fields,
             'count': 1,

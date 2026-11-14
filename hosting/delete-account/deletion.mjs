@@ -29,7 +29,8 @@ export function canDelete({ signedIn, understood, typed }) {
  * so a run that stops halfway is finished by running it again.
  *
  * [fs] provides: markDeletion(), deleteSome(collection) -> count,
- * deleteDoc(path), clearMarker(), deleteProfile(), deleteSignIn().
+ * deleteDoc(path), clearWriteCounter(), clearMarker(), deleteProfile(),
+ * deleteSignIn().
  */
 export async function deleteEverything(fs, onStep = () => {}) {
   onStep('Recording the request');
@@ -40,6 +41,7 @@ export async function deleteEverything(fs, onStep = () => {}) {
   }
   onStep('Deleting profile photo');
   await fs.deleteDoc('private/avatar');
+  await fs.clearWriteCounter();
   await fs.clearMarker();
   onStep('Deleting profile');
   await fs.deleteProfile();

@@ -94,8 +94,8 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
 
     final month = _month;
     final repository = widget.budgetRepository;
-    // The screen updates straight away from Firestore's local cache; only a
-    // rejected write needs a message.
+    // The screen updates once the budget is saved; a failed save (offline,
+    // or the daily limit) says why.
     try {
       final limit = result.limit;
       if (limit == null) {

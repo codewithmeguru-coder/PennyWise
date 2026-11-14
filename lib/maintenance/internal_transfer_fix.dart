@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../accounts/account_repository.dart';
 import '../accounts/money_account.dart';
 import '../data/data_exception.dart';
+import '../data/write_limit.dart';
 import '../models/ledger.dart';
 import '../models/monthly_summary.dart';
 import '../models/transaction_model.dart';
@@ -315,6 +316,11 @@ class FirestoreMoveFixRepository implements MoveFixRepository {
       return await _collection.firestore.runTransaction((tx) async {
         final now = recordFrom(await tx.get(doc));
         if (now == null || !MoveFix.sameAsPreview(now, r)) return false;
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_collection),
+          'transactions/${doc.id}',
+        );
         tx.update(doc, {
           'type': TransactionType.transfer.wireName,
           'category': 'transfer',
@@ -348,6 +354,11 @@ class FirestoreMoveFixRepository implements MoveFixRepository {
         final now = recordFrom(await tx.get(doc));
         final outcome = MoveFix.undoOutcome(now, change);
         if (outcome != UndoOutcome.undone) return outcome;
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_collection),
+          'transactions/${doc.id}',
+        );
         tx.update(doc, {
           'type': original.type,
           'category': original.category,

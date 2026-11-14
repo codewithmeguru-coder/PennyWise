@@ -21,6 +21,19 @@ class FakeTransactionRepository implements TransactionRepository {
   /// When set, [watchAll] emits this error instead of data.
   DataException? loadError;
 
+  /// The next this many [add] / [update] calls fail with this message (as
+  /// Firestore transactions do offline), writing nothing.
+  var failWrites = 0;
+  static const offline =
+      "Can't reach the server. Check your connection and try again.";
+
+  void _maybeFail() {
+    if (failWrites > 0) {
+      failWrites--;
+      throw const DataException(offline);
+    }
+  }
+
   List<TransactionModel> get items => _sorted();
 
   List<TransactionModel> _sorted() =>
@@ -37,6 +50,7 @@ class FakeTransactionRepository implements TransactionRepository {
 
   @override
   Future<String> add(TransactionModel t) async {
+    _maybeFail();
     final id = 'fake-${_nextId++}';
     _items[id] = t.withId(id);
     _emit();
@@ -55,6 +69,7 @@ class FakeTransactionRepository implements TransactionRepository {
 
   @override
   Future<void> update(TransactionModel t) async {
+    _maybeFail();
     if (!_items.containsKey(t.id)) {
       throw const DataException('That item no longer exists.');
     }

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/avatar_photo.dart';
 import 'data_exception.dart';
+import 'write_limit.dart';
 
 /// Read / write the signed-in user's own profile photo.
 abstract class AvatarRepository {
@@ -45,10 +46,20 @@ class FirestoreAvatarRepository implements AvatarRepository {
   @override
   Future<void> save(Uint8List bytes) async {
     try {
-      await _doc.set({
-        'imageBase64': AvatarPhoto.encode(bytes),
-        'updatedAt': FieldValue.serverTimestamp(),
+      // Each save claims one from today's edit limit, in the same write.
+      await _doc.firestore.runTransaction((tx) async {
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_doc.parent),
+          'private/avatar',
+        );
+        tx.set(_doc, {
+          'imageBase64': AvatarPhoto.encode(bytes),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       });
+    } on DataException {
+      rethrow;
     } catch (e) {
       throw DataException.from(e);
     }

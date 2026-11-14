@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/budget_model.dart';
 import 'data_exception.dart';
+import 'write_limit.dart';
 
 /// Read / write one user's monthly budgets.
 abstract class BudgetRepository {
@@ -40,12 +41,23 @@ class FirestoreBudgetRepository implements BudgetRepository {
 
   @override
   Future<void> save(BudgetModel budget) async {
+    final doc = _collection.doc(budget.monthId);
     try {
-      await _collection.doc(budget.monthId).set({
-        'month': budget.monthId, // string "YYYY-MM", same as the doc id
-        'limit': budget.limit, // number
-        'updatedAt': FieldValue.serverTimestamp(),
+      // Each save claims one from today's edit limit, in the same write.
+      await _collection.firestore.runTransaction((tx) async {
+        await WriteLimit.claimEdit(
+          tx,
+          WriteLimit.editCounterOf(_collection),
+          'budgets/${doc.id}',
+        );
+        tx.set(doc, {
+          'month': budget.monthId, // string "YYYY-MM", same as the doc id
+          'limit': budget.limit, // number
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       });
+    } on DataException {
+      rethrow;
     } catch (e) {
       throw DataException.from(e);
     }

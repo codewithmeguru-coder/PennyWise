@@ -25,6 +25,16 @@ class DeleteAccountScreen extends StatefulWidget {
   static const confirmWord = 'DELETE';
 
   /// What is deleted, as shown before anything happens.
+  /// What may remain (the daily limit counters, which can't be removed on
+  /// the day they were used without resetting the limit). The same words
+  /// are on the web deletion page and in the privacy policy.
+  static const leftoverNote =
+      'If anything was added or changed in your account on the day you '
+      'delete it, small usage counters containing only a number and '
+      'timestamp may remain under your deleted account\'s ID. They contain '
+      'no financial transaction details and cannot be accessed through '
+      'PennyWise.';
+
   static List<String> whatIsDeleted(int? transactions) => [
     'Your sign-in account${transactions == null ? '' : ''}',
     transactions == null
@@ -204,6 +214,12 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
           Text(
             'Not affected: the SMS messages on your phone, and your Google '
             'account itself.',
+            style: TextStyle(color: c.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            DeleteAccountScreen.leftoverNote,
+            key: const Key('delete-leftover'),
             style: TextStyle(color: c.textSecondary),
           ),
           if (!_pending) ...[

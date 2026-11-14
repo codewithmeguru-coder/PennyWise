@@ -22,6 +22,11 @@ abstract class UserDataStore {
   /// Deletes one document by path under the user (e.g. "private/avatar").
   Future<void> deleteDoc(String path);
 
+  /// Removes the daily write and edit counters, or (when one was used
+  /// today, and the rules keep it so the limit can't be reset) clears its
+  /// last path. Claims nothing: the cleanup isn't counted as an edit.
+  Future<void> clearWriteCounter();
+
   /// Removes the request record (last, after everything it unlocked).
   Future<void> clearMarker();
 
@@ -76,6 +81,26 @@ class FirestoreUserDataStore implements UserDataStore {
     final [collection, id] = path.split('/');
     return _user.collection(collection).doc(id).delete();
   });
+
+  @override
+  Future<void> clearWriteCounter() => _guard(() async {
+    for (final name in counters) {
+      final ref = _user.collection('limits').doc(name);
+      if (!(await ref.get()).exists) continue;
+      try {
+        await ref.delete();
+      } on FirebaseException catch (e) {
+        if (e.code != 'permission-denied') rethrow;
+        // Today's counter stays (deleting it would reset the daily limit);
+        // only the path of the last record is removed. What's left is a
+        // number and a time.
+        await ref.update({'lastPath': ''});
+      }
+    }
+  });
+
+  /// The daily write and edit counters under `limits/`.
+  static const counters = ['daily', 'edits'];
 
   @override
   Future<void> clearMarker() => _guard(() => _marker.delete());
@@ -167,6 +192,7 @@ class AccountDeletion {
       }
       step('Deleting your profile photo');
       await _data.deleteDoc(photo);
+      await _data.clearWriteCounter();
       await _data.clearMarker();
       step('Deleting your profile');
       await _data.deleteProfile();

@@ -1,0 +1,607 @@
+rules_version = '2';
+
+// ROLLOUT STEP 1 (temporary). Same as firestore.rules, except that
+// nothing has to claim the daily counters yet: new transactions, learned
+// categories, custom categories, accounts and balance history records
+// don't claim limits/daily, and edits don't claim limits/edits. Both
+// counter documents are already allowed (and checked), so the new app
+// (which claims) and the old app (which doesn't) both work. Deploy this
+// first, install the new app, then deploy firestore.rules (step 2), which
+// requires both claims.
+//
+
+// PennyWise security rules.
+//
+// Data layout (everything a user owns lives under their own uid):
+//   users/{uid}                      profile: email, name, photo, timestamps
+//   users/{uid}/transactions/{id}    money movements of seven types (manual, or
+//                                    detected from an SMS; detected ones use
+//                                    "<source>_<code>" as the id, which is
+//                                    what prevents duplicates)
+//   users/{uid}/budgets/{YYYY-MM}    overall spending limit per month
+//   users/{uid}/categoryRules/{key}  categories learned from the user's own
+//                                    corrections ("OUT:NAIVAS" -> shopping)
+//   users/{uid}/accounts/{id}        the user's own accounts (SIM 1 / SIM 2
+//                                    M-Pesa, their Ziidi and Fuliza, banks,
+//                                    cash)
+//   users/{uid}/balanceAnchors/{id}  history of each account's starting
+//                                    balance; never edited or deleted,
+//                                    only marked undone
+//
+// Anything not matched below is denied.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Server timestamps written by FieldValue.serverTimestamp() equal
+    // request.time, so clients can't backdate or forge them.
+    function stampedNow(field) {
+      return request.resource.data[field] == request.time;
+    }
+
+    function createdAtUnchanged() {
+      return request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // Account deletion: once the owner has recorded a deletion request
+    // (users/{uid}/deletionRequest/current), the records normally kept
+    // forever (accounts, balance history, categories) may be deleted too,
+    // by that owner only. Nothing else changes.
+    function deleting(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/deletionRequest/current);
+    }
+
+    // ---- Daily write and edit limits ---------------------------------------
+    // Every new transaction, learned category, custom category, account or
+    // balance history record must "claim" the owner's counter at users/{uid}/limits/daily in the SAME
+    // request: the counter goes up by exactly one, records the new
+    // document's path, and is stamped with the request time. A request can
+    // write the counter only once, so it can create only one such document,
+    // and the counter can't pass dailyWriteLimit() in one UTC day. Writing
+    // straight to Firestore doesn't get around it: the rules check it.
+    //
+    // Edits work the same way with a second counter, users/{uid}/limits/edits
+    // (claimsEdit, dailyEditLimit()): every update of the profile, a
+    // transaction, learned category, account or category, and every save of
+    // a budget, category limit or profile photo. Deletes aren't counted
+    // (only what was created, itself limited, can be deleted).
+    function dailyWriteLimit() {
+      return 1500;
+    }
+
+    function dailyEditLimit() {
+      return 3000;
+    }
+
+    function limitOf(name) {
+      return name == 'daily' ? dailyWriteLimit() : dailyEditLimit();
+    }
+
+    function utcDay(t) {
+      return int(t.toMillis() / 86400000);
+    }
+
+    function limitPath(userId, name) {
+      return /databases/$(database)/documents/users/$(userId)/limits/$(name);
+    }
+
+    // What counter [name] must be after this request: one more than
+    // today's value, or 1 on a new day (or the first time).
+    function nextCount(userId, name) {
+      return exists(limitPath(userId, name))
+          && utcDay(get(limitPath(userId, name)).data.at) == utcDay(request.time)
+        ? get(limitPath(userId, name)).data.count + 1
+        : 1;
+    }
+
+    function claimsCounter(userId, name, path) {
+      return existsAfter(limitPath(userId, name))
+        && getAfter(limitPath(userId, name)).data.lastPath == path
+        && getAfter(limitPath(userId, name)).data.at == request.time
+        && getAfter(limitPath(userId, name)).data.count == nextCount(userId, name);
+    }
+
+    // A new document ([path] is e.g. "transactions/abc").
+    function claimsLimit(userId, path) {
+      return claimsCounter(userId, 'daily', path);
+    }
+
+    // An edit of an existing document (or a save of a budget, category
+    // limit, photo or profile, which may create it).
+    function claimsEdit(userId, path) {
+      return claimsCounter(userId, 'edits', path);
+    }
+
+    // ---- users/{uid} -----------------------------------------------------
+
+    function isValidProfile(data) {
+      return data.keys().hasAll(['email', 'createdAt', 'updatedAt'])
+        // hasOnly() is what keeps passwords (or anything else) out.
+        && data.keys().hasOnly(
+            ['email', 'displayName', 'photoUrl', 'createdAt', 'updatedAt'])
+        && data.email == request.auth.token.email
+        && (!('displayName' in data)
+            || data.displayName == null
+            || (data.displayName is string && data.displayName.size() <= 100))
+        // Google profile picture; null for email/password accounts.
+        && (!('photoUrl' in data)
+            || data.photoUrl == null
+            || (data.photoUrl is string
+                && data.photoUrl.size() <= 2048
+                && data.photoUrl.matches('^https://.+')))
+        && data.createdAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read, delete: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && isValidProfile(request.resource.data)
+        && stampedNow('createdAt') && stampedNow('updatedAt');
+      allow update: if isOwner(userId)
+        && isValidProfile(request.resource.data)
+        && createdAtUnchanged() && stampedNow('updatedAt');
+
+      // ---- users/{uid}/transactions/{transactionId} ----------------------
+
+      // Accounts a transaction can name ("savings" is only reached through
+      // the savings types, so it is never a from/to account).
+      function isSpendableAccount(value) {
+        return value in ['mpesa', 'airtel_money', 'cash', 'bank'];
+      }
+
+      // Ids of the user's own accounts, e.g. "mpesa-sim1", "equity-bank".
+      function isAccountId(value) {
+        return value is string && value.matches('^[a-z0-9-]{1,48}$');
+      }
+
+      function isValidTransaction(data) {
+        return data.keys().hasAll(
+            ['amount', 'type', 'category', 'description', 'date',
+             'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(
+            ['amount', 'type', 'category', 'description', 'note', 'date',
+             'source', 'reference', 'smsText', 'account', 'toAccount', 'fee',
+             'interest', 'refundOf', 'categoryStatus', 'channel',
+             'reclassifiedFrom', 'accountId', 'toAccountId', 'simSlot',
+             'createdAt', 'updatedAt'])
+          && data.amount is number
+          && data.amount > 0 && data.amount < 1000000000
+          // "income" and "expense" are what every older document holds.
+          && data.type in ['income', 'expense', 'transfer',
+                           'savings_contribution', 'savings_withdrawal',
+                           'refund', 'debt_repayment']
+          // All optional, so older documents stay valid.
+          && (!('account' in data) || isSpendableAccount(data.account))
+          // The user's own account ids (Stage 3); optional.
+          && (!('accountId' in data) || isAccountId(data.accountId))
+          && (!('toAccountId' in data) || isAccountId(data.toAccountId))
+          && (!('simSlot' in data)
+              || (data.simSlot is int && data.simSlot >= 0
+                  && data.simSlot <= 3))
+          // Two account ids on one transaction are never the same account.
+          && (!('accountId' in data && 'toAccountId' in data)
+              || data.toAccountId != data.accountId)
+          // A transfer names both sides. With account ids (needed for
+          // SIM 1 -> SIM 2, where both are "M-Pesa") both ids are required;
+          // without them, both older generic accounts (M-Pesa, Cash...) are.
+          // Any generic toAccount given must be spendable and differ from
+          // the generic account, so the two pairs can't contradict.
+          && (data.type == 'transfer'
+              ? (('accountId' in data || 'toAccountId' in data
+                  ? ('accountId' in data && 'toAccountId' in data)
+                  : ('account' in data && 'toAccount' in data))
+                 && (!('toAccount' in data)
+                     || (isSpendableAccount(data.toAccount)
+                         && data.toAccount != data.get('account', null))))
+              : !('toAccount' in data))
+          // The other-side account id only exists where there is another
+          // side: transfers, savings and debt repayments.
+          && (!('toAccountId' in data)
+              || data.type in ['transfer', 'savings_contribution',
+                               'savings_withdrawal', 'debt_repayment'])
+          // Provider charge on top of the amount.
+          && (!('fee' in data)
+              || (data.fee is number && data.fee > 0
+                  && data.fee < 1000000000))
+          // Interest is part of a debt repayment, never more than it.
+          && (!('interest' in data)
+              || (data.type == 'debt_repayment' && data.interest is number
+                  && data.interest >= 0 && data.interest <= data.amount))
+          // Optional link from a refund to the purchase it refunds.
+          && (!('refundOf' in data)
+              || (data.type == 'refund' && data.refundOf is string
+                  && data.refundOf.size() > 0
+                  && data.refundOf.size() <= 128))
+          && data.category is string
+          && data.category.size() > 0 && data.category.size() <= 40
+          && data.description is string
+          && data.description.size() > 0 && data.description.size() <= 100
+          && (!('note' in data)
+              || (data.note is string && data.note.size() <= 500))
+          // Set only on transactions detected from an M-Pesa / Airtel Money
+          // / Equity Bank SMS (Android). Manual entries don't have them.
+          && (!('source' in data) || data.source in ['mpesa', 'airtel', 'equity'])
+          && (!('reference' in data)
+              || (data.reference is string
+                  && data.reference.size() > 0
+                  && data.reference.size() <= 40))
+          && (!('smsText' in data)
+              || (data.smsText is string && data.smsText.size() <= 1000))
+          // Phase 3: how sure the automatic category is (missing = confirmed)
+          // and how the money moved, from the SMS.
+          && (!('categoryStatus' in data)
+              || data.categoryStatus in ['suggested', 'review'])
+          && (!('channel' in data)
+              || data.channel in ['till', 'paybill', 'send', 'agent',
+                                  'airtime', 'received'])
+          // Undo marker left by the opt-in history fix: what the record was
+          // before. Only on SMS imports, and only these three keys.
+          && (!('reclassifiedFrom' in data)
+              || ('source' in data && 'reference' in data
+                  && data.reclassifiedFrom is map
+                  && data.reclassifiedFrom.keys().hasAll(
+                      ['type', 'category', 'at'])
+                  && data.reclassifiedFrom.keys().hasOnly(
+                      ['type', 'category', 'at'])
+                  && data.reclassifiedFrom.type in ['income', 'expense']
+                  && data.reclassifiedFrom.category is string
+                  && data.reclassifiedFrom.category.size() > 0
+                  && data.reclassifiedFrom.category.size() <= 40
+                  && data.reclassifiedFrom.at is timestamp))
+          && data.date is timestamp
+          && data.createdAt is timestamp;
+      }
+
+      // The undo marker can't be created with a document, and when it is
+      // added or changed its time must be now (so it equals updatedAt; a
+      // later edit by the user then shows as updatedAt > at).
+      function reclassificationOk() {
+        return !('reclassifiedFrom' in request.resource.data)
+          || (('reclassifiedFrom' in resource.data)
+              && request.resource.data.reclassifiedFrom
+                   == resource.data.reclassifiedFrom)
+          || request.resource.data.reclassifiedFrom.at == request.time;
+      }
+
+      match /transactions/{transactionId} {
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidTransaction(request.resource.data)
+          && !('reclassifiedFrom' in request.resource.data)
+          && stampedNow('createdAt') && stampedNow('updatedAt');
+        allow update: if isOwner(userId)
+          && isValidTransaction(request.resource.data)
+          && reclassificationOk()
+          && createdAtUnchanged() && stampedNow('updatedAt');
+      }
+
+      // ---- users/{uid}/categoryRules/{ruleId} ----------------------------
+
+      function isValidRule(data, ruleId) {
+        return data.keys().hasAll(
+            ['merchantKey', 'categoryId', 'type', 'count', 'createdAt',
+             'updatedAt'])
+          && data.keys().hasOnly(
+            ['merchantKey', 'categoryId', 'type', 'count', 'label',
+             'createdAt', 'updatedAt'])
+          // The id is the merchant key, e.g. "OUT:NAIVAS".
+          && ruleId.matches('^[A-Z0-9_:-]{1,120}$')
+          && data.merchantKey == ruleId
+          && data.categoryId is string
+          && data.categoryId.size() > 0 && data.categoryId.size() <= 40
+          && data.type in ['income', 'expense', 'transfer',
+                           'savings_contribution', 'savings_withdrawal',
+                           'refund', 'debt_repayment']
+          && data.count is int && data.count >= 1 && data.count <= 100000
+          && (!('label' in data)
+              || (data.label is string && data.label.size() <= 100))
+          && data.createdAt is timestamp;
+      }
+
+      match /categoryRules/{ruleId} {
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidRule(request.resource.data, ruleId)
+          && stampedNow('createdAt') && stampedNow('updatedAt');
+        allow update: if isOwner(userId)
+          && isValidRule(request.resource.data, ruleId)
+          && createdAtUnchanged() && stampedNow('updatedAt');
+      }
+
+      // ---- users/{uid}/accounts/{accountId} ------------------------------
+
+      function isValidAccount(data, accountId) {
+        return data.keys().hasAll(
+            ['name', 'kind', 'provider', 'active', 'order', 'createdAt',
+             'updatedAt'])
+          && data.keys().hasOnly(
+            ['name', 'kind', 'provider', 'simSlot', 'parentId',
+             'openingBalance', 'openingDate', 'active', 'order', 'createdAt',
+             'updatedAt'])
+          && accountId.matches('^[a-z0-9-]{1,48}$')
+          && data.name is string
+          && data.name.size() > 0 && data.name.size() <= 40
+          && data.kind in ['mobile_money', 'bank', 'cash', 'savings', 'loan']
+          && data.provider in ['safaricom', 'airtel', 'equity', 'other_bank',
+                               'none']
+          && (!('simSlot' in data)
+              || (data.simSlot is int && data.simSlot >= 0
+                  && data.simSlot <= 3))
+          && (!('parentId' in data) || isAccountId(data.parentId))
+          && (!('openingBalance' in data)
+              || (data.openingBalance is number
+                  && data.openingBalance > -1000000000
+                  && data.openingBalance < 1000000000))
+          && (!('openingDate' in data) || data.openingDate is timestamp)
+          && data.active is bool
+          && data.order is int && data.order >= 0 && data.order <= 10000
+          && data.createdAt is timestamp;
+      }
+
+      match /accounts/{accountId} {
+        // No delete: hiding an account (active = false) keeps every
+        // transaction that points at it meaningful. Only when the owner is
+        // deleting their whole account.
+        allow read: if isOwner(userId);
+        allow delete: if isOwner(userId) && deleting(userId);
+        allow create: if isOwner(userId)
+          && isValidAccount(request.resource.data, accountId)
+          && stampedNow('createdAt') && stampedNow('updatedAt');
+        allow update: if isOwner(userId)
+          && isValidAccount(request.resource.data, accountId)
+          && createdAtUnchanged() && stampedNow('updatedAt');
+      }
+
+      // ---- users/{uid}/balanceAnchors/{anchorId} -------------------------
+      // One record per change of an account's starting balance (its
+      // anchor): the new value, the one it replaced, and why. Written in the
+      // same transaction as the account itself.
+
+      function isOptionalBalance(data, amount, at) {
+        // A value and its effective time come together, or not at all
+        // ("no starting balance").
+        return (amount in data) == (at in data)
+          && (!(amount in data)
+              || (data[amount] is number
+                  && data[amount] > -1000000000
+                  && data[amount] < 1000000000
+                  && data[at] is timestamp));
+      }
+
+      function isValidAnchor(data, anchorId) {
+        return data.keys().hasAll(
+            ['uid', 'accountId', 'currency', 'reason', 'undone',
+             'createdAt'])
+          && data.keys().hasOnly(
+            ['uid', 'accountId', 'amount', 'effectiveAt', 'previousAmount',
+             'previousEffectiveAt', 'currency', 'reason', 'undone',
+             'undoneAt', 'createdAt'])
+          && anchorId.matches('^[A-Za-z0-9_-]{1,80}$')
+          && data.uid == userId
+          && isAccountId(data.accountId)
+          && data.currency == 'KES'
+          && data.reason in ['Starting balances', 'Start over', 'Edited',
+                             'Used SMS balance']
+          && isOptionalBalance(data, 'amount', 'effectiveAt')
+          && isOptionalBalance(data, 'previousAmount', 'previousEffectiveAt')
+          && data.undone is bool
+          && data.createdAt is timestamp;
+      }
+
+      function anchoredAccount(accountId) {
+        return /databases/$(database)/documents/users/$(userId)/accounts/$(accountId);
+      }
+
+      // [account] (an account document's data) holds the starting balance
+      // that [record] names under [amount] / [at]; absent = none.
+      function holdsAnchor(account, record, amount, at) {
+        return (amount in record)
+          ? ('openingBalance' in account
+             && 'openingDate' in account
+             && account.openingBalance == record[amount]
+             && account.openingDate == record[at])
+          : !('openingBalance' in account);
+      }
+
+      match /balanceAnchors/{anchorId} {
+        allow read: if isOwner(userId);
+        // Only for one of the user's own accounts (existing, or created in
+        // the same write), stamped now, and not undone yet. The record must
+        // match the account: "amount" is what the account holds after this
+        // write, "previous" what it held before (none for a new account).
+        // So a record can only be written together with that change.
+        allow create: if isOwner(userId)
+          && isValidAnchor(request.resource.data, anchorId)
+          && request.resource.data.undone == false
+          && !('undoneAt' in request.resource.data)
+          && existsAfter(anchoredAccount(request.resource.data.accountId))
+          && holdsAnchor(
+               getAfter(anchoredAccount(request.resource.data.accountId)).data,
+               request.resource.data, 'amount', 'effectiveAt')
+          && (exists(anchoredAccount(request.resource.data.accountId))
+              ? holdsAnchor(
+                  get(anchoredAccount(request.resource.data.accountId)).data,
+                  request.resource.data, 'previousAmount',
+                  'previousEffectiveAt')
+              : !('previousAmount' in request.resource.data))
+          && stampedNow('createdAt')
+          // A record whose values match the account's unchanged ones is
+          // valid too, so each one claims a new record (else they could be
+          // written without end).;
+        // Undo is the only change: undone false -> true, stamped now, in
+        // the same write that puts the account back to the previous value,
+        // and only while the account still holds this record's value (an
+        // old Undo can't overwrite a later change). Everything else
+        // (owner, account, amounts, times, reason) stays. No edit claim of
+        // its own: the account update it comes with claims one, and a
+        // record can be undone only once.
+        allow update: if isOwner(userId)
+          && resource.data.undone == false
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['undone', 'undoneAt'])
+          && request.resource.data.undone == true
+          && request.resource.data.undoneAt == request.time
+          && holdsAnchor(get(anchoredAccount(resource.data.accountId)).data,
+               resource.data, 'amount', 'effectiveAt')
+          && holdsAnchor(getAfter(anchoredAccount(resource.data.accountId)).data,
+               resource.data, 'previousAmount', 'previousEffectiveAt');
+        // No delete: the history is kept, unless the owner is deleting
+        // their whole account.
+        allow delete: if isOwner(userId) && deleting(userId);
+      }
+
+      // ---- users/{uid}/budgets/{monthId} ---------------------------------
+
+      function isValidBudget(data, monthId) {
+        return data.keys().hasAll(['month', 'limit', 'updatedAt'])
+          && data.keys().hasOnly(['month', 'limit', 'updatedAt'])
+          // The document id is the month ("YYYY-MM"), so there's one budget
+          // per month.
+          && monthId.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && data.month == monthId
+          && data.limit is number
+          && data.limit > 0 && data.limit < 1000000000;
+      }
+
+      match /budgets/{monthId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidBudget(request.resource.data, monthId)
+          && stampedNow('updatedAt');
+      }
+
+      // ---- users/{uid}/categoryBudgets/{YYYY-MM}_{categoryId} -------------
+
+      // Per-category monthly limits, separate from the overall budget above
+      // (which they never change). The document id is "YYYY-MM_categoryId"
+      // (e.g. "2026-10_food"), so there's one limit per category per month.
+      // Category ids are checked by shape, not against a fixed list, so new
+      // categories need no rules change.
+      function isValidCategoryBudget(data, budgetId) {
+        return data.keys().hasAll(['month', 'categoryId', 'limit', 'updatedAt'])
+          && data.keys().hasOnly(['month', 'categoryId', 'limit', 'updatedAt'])
+          && data.month is string
+          && data.month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+          && data.categoryId is string
+          && data.categoryId.matches('^[a-z_]{1,40}$')
+          && budgetId == data.month + '_' + data.categoryId
+          && data.limit is number
+          && data.limit > 0 && data.limit < 1000000000;
+      }
+
+      match /categoryBudgets/{budgetId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidCategoryBudget(request.resource.data, budgetId)
+          && stampedNow('updatedAt');
+      }
+
+      // ---- users/{uid}/categories/{categoryId} -----------------------------
+
+      // The user's own categories (the built-in ones live in the app). The id
+      // is generated once ("c_" + lower-case letters, never like a built-in
+      // id) and never changes, so renaming keeps every record that uses it.
+      // There is no delete: a category is deactivated instead, so past
+      // transactions, rules and limits always find it. Name uniqueness can't
+      // be checked here (rules can't search other documents); the app does.
+      function isValidCategory(data) {
+        return data.keys().hasAll(['name', 'type', 'icon', 'active',
+                                   'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(['name', 'type', 'icon', 'active',
+                                  'createdAt', 'updatedAt'])
+          && data.name is string
+          && data.name.size() > 0 && data.name.size() <= 30
+          && data.type in ['expense', 'income']
+          && data.icon is string
+          && data.icon.matches('^[a-z_]{1,30}$')
+          && data.active is bool;
+      }
+
+      match /categories/{categoryId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && categoryId.matches('^c_[a-z]{6,30}$')
+          && isValidCategory(request.resource.data)
+          && stampedNow('createdAt')
+          && stampedNow('updatedAt');
+        allow update: if isOwner(userId)
+          && isValidCategory(request.resource.data)
+          && request.resource.data.type == resource.data.type
+          && createdAtUnchanged()
+          && stampedNow('updatedAt');
+        // No delete (turning off keeps old records readable), unless the
+        // owner is deleting their whole account.
+        allow delete: if isOwner(userId) && deleting(userId);
+      }
+
+      // ---- users/{uid}/limits/{daily, edits} --------------------------------
+      // The daily write and edit counters (see claimsLimit, claimsEdit).
+      // Fields: at (request time), count, lastPath. Each can only go up by
+      // one per request, up to its limit, and starts again at 1 on a new UTC
+      // day.
+      match /limits/{docId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && docId in ['daily', 'edits']
+          && request.resource.data.keys().hasOnly(['at', 'count', 'lastPath'])
+          && request.resource.data.at == request.time
+          && request.resource.data.count == nextCount(userId, docId)
+          && request.resource.data.count <= limitOf(docId)
+          && request.resource.data.lastPath is string
+          && request.resource.data.lastPath.size() > 0
+          && request.resource.data.lastPath.size() <= 200;
+        // Account deletion (the cleanup itself claims nothing): today's
+        // counter can't be removed (that would reset it), only cleared of
+        // the last path; an older one can go.
+        allow update: if isOwner(userId)
+          && deleting(userId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['lastPath'])
+          && request.resource.data.lastPath == '';
+        allow delete: if isOwner(userId)
+          && deleting(userId)
+          && utcDay(resource.data.at) != utcDay(request.time);
+      }
+
+      // ---- users/{uid}/deletionRequest/current ----------------------------
+      // Recorded first when the owner deletes their account, so a deletion
+      // that stops halfway can be finished later. Only "requestedAt",
+      // stamped now; removed by the owner as the last step.
+      match /deletionRequest/{docId} {
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && docId == 'current'
+          && request.resource.data.keys().hasOnly(['requestedAt'])
+          && stampedNow('requestedAt');
+      }
+
+      // ---- users/{uid}/private/avatar ------------------------------------
+
+      // The user's own profile photo, one small document (no Storage): a
+      // JPEG, PNG or WebP of at most 250 KB, stored as base64 text, which
+      // starts "/9j/", "iVBORw0KGgo", or "UklGR" + 6 characters (the file
+      // size) + "XRUJQ" ("RIFF....WEBP": not WAV, AVI or other RIFF files).
+      // Only this one path; nothing else under private/ is allowed.
+      function isValidAvatar(data) {
+        return data.keys().hasAll(['imageBase64', 'updatedAt'])
+          && data.keys().hasOnly(['imageBase64', 'updatedAt'])
+          && data.imageBase64 is string
+          && data.imageBase64.size() > 0
+          && data.imageBase64.size() <= 341336
+          && data.imageBase64.matches(
+              '^(/9j/|iVBORw0KGgo|UklGR[A-Za-z0-9+/]{6}XRUJQ)'
+              + '[A-Za-z0-9+/]*={0,2}$');
+      }
+
+      match /private/avatar {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidAvatar(request.resource.data)
+          && stampedNow('updatedAt');
+      }
+    }
+  }
+}

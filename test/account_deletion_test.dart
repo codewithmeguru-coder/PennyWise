@@ -59,6 +59,15 @@ class FakeUserData implements UserDataStore {
     if (path == AccountDeletion.photo) photo = false;
   }
 
+  bool counterCleared = false;
+
+  @override
+  Future<void> clearWriteCounter() async {
+    _maybeFail('counter');
+    if (!marker) throw const DataException('Permission denied.');
+    counterCleared = true;
+  }
+
   @override
   Future<void> clearMarker() async {
     log.add('clear');
@@ -72,7 +81,11 @@ class FakeUserData implements UserDataStore {
   }
 
   bool get allGone =>
-      docs.values.every((n) => n == 0) && !photo && !profile && !marker;
+      docs.values.every((n) => n == 0) &&
+      !photo &&
+      !profile &&
+      !marker &&
+      counterCleared;
 }
 
 void main() {
@@ -145,6 +158,10 @@ void main() {
     });
   });
 
+  test('both usage counters are cleaned up (new records and edits)', () {
+    expect(FirestoreUserDataStore.counters, ['daily', 'edits']);
+  });
+
   test('this phone: only the deleted user\'s saved settings are removed',
       () async {
     SharedPreferences.setMockInitialValues({
@@ -160,7 +177,8 @@ void main() {
 
   group('the screen', () {
     Future<void> show(WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1080, 2400);
+      // A tall phone, so the whole form is built without scrolling.
+      tester.view.physicalSize = const Size(1080, 3300);
       tester.view.devicePixelRatio = 2.75;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
@@ -191,6 +209,21 @@ void main() {
       expect(find.textContaining('permanent'), findsOneWidget);
       expect(find.text('• All 1234 of your transactions'), findsOneWidget);
       expect(find.textContaining('profile photo'), findsOneWidget);
+    });
+
+    testWidgets('says which usage counters may remain, in the agreed words',
+        (tester) async {
+      await show(tester);
+      expect(
+        find.text(
+          'If anything was added or changed in your account on the day you '
+          'delete it, small usage counters containing only a number and '
+          'timestamp may remain under your deleted account\'s ID. They '
+          'contain no financial transaction details and cannot be accessed '
+          'through PennyWise.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('locked until ticked, DELETE typed and the password given',
