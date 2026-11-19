@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "240925304261-j44ligashtso0qifkbbj404isadarsqi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.codewithmeguru.pennywise",
+            "certificate_hash": "d9613e98da381044b489c195a03eec1b5976b289"
+          }
+        },
+        {
           "client_id": "240925304261-mnn2cp8pitg7mlk10u16ug96sio6qfd9.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
