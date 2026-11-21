@@ -20,6 +20,7 @@ class AppDrawer extends StatelessWidget {
     required this.onOpenSettings,
     required this.onSignOut,
     this.avatar,
+    this.onOpenReport,
   });
 
   final AppUser user;
@@ -36,6 +37,9 @@ class AppDrawer extends StatelessWidget {
 
   final ValueChanged<int> onSelectTab;
   final VoidCallback onOpenSettings;
+
+  /// Opens Download report (PDF / CSV); null hides the item.
+  final VoidCallback? onOpenReport;
   final VoidCallback onSignOut;
 
   /// Closes the drawer first, then runs [action], so the new screen or
@@ -76,6 +80,12 @@ class AppDrawer extends StatelessWidget {
                   selected: currentTab == 2,
                   onTap: () => _closeThen(context, () => onSelectTab(2)),
                 ),
+                if (onOpenReport != null)
+                  _DrawerItem(
+                    icon: Icons.file_download_outlined,
+                    label: 'Download report',
+                    onTap: () => _closeThen(context, onOpenReport!),
+                  ),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Divider(height: 1),

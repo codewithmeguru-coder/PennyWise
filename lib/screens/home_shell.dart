@@ -39,6 +39,7 @@ import 'budgets_screen.dart';
 import 'dashboard_screen.dart';
 import 'needs_review_screen.dart';
 import 'settings_screen.dart';
+import 'spending_report_screen.dart';
 import 'transactions_screen.dart';
 import 'trends_screen.dart';
 
@@ -245,6 +246,17 @@ class _HomeShellState extends State<HomeShell> {
   void _openTrends() {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => TrendsScreen(store: widget.store, month: _month),
+    ));
+  }
+
+  /// Download report: a PDF or CSV of a period's spending, to share.
+  void _openReport() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => SpendingReportScreen(
+        store: widget.store,
+        accounts: widget.accounts.all,
+        userName: widget.user.displayName,
+      ),
     ));
   }
 
@@ -680,6 +692,7 @@ class _HomeShellState extends State<HomeShell> {
         month: _month,
         categoryBudgets: widget.categoryBudgets,
         onOpenTrends: _openTrends,
+        onOpenReport: _openReport,
       ),
     ];
 
@@ -693,6 +706,7 @@ class _HomeShellState extends State<HomeShell> {
         onOpenSettings: _openSettings,
         onSignOut: _confirmSignOut,
         avatar: widget.avatar,
+        onOpenReport: _openReport,
       ),
       // IndexedStack keeps each tab's state (scroll position, filter).
       body: widget.categories == null
