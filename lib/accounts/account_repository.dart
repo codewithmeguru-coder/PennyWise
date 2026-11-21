@@ -65,6 +65,9 @@ class FirestoreAccountRepository implements AccountRepository {
           'openingDate': Timestamp.fromDate(a.openingDate!),
         'active': a.active,
         'order': a.order,
+        if (a.creditLimit != null) 'creditLimit': a.creditLimit,
+        if (a.creditLimit != null && a.creditLimitUpdatedAt != null)
+          'creditLimitUpdatedAt': Timestamp.fromDate(a.creditLimitUpdatedAt!),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -86,6 +89,7 @@ class FirestoreAccountRepository implements AccountRepository {
             if (account.openingBalance == null)
               'openingBalance': FieldValue.delete(),
             if (account.openingDate == null) 'openingDate': FieldValue.delete(),
+            ..._clearedLimit(account),
           });
         } else {
           await _create(tx, account);
@@ -137,6 +141,15 @@ class FirestoreAccountRepository implements AccountRepository {
         if (account.openingBalance == null)
           'openingBalance': FieldValue.delete(),
         if (account.openingDate == null) 'openingDate': FieldValue.delete(),
+        ..._clearedLimit(account),
+      };
+
+  /// Removes a loan limit the user cleared.
+  static Map<String, dynamic> _clearedLimit(MoneyAccount account) => {
+        if (account.creditLimit == null) 'creditLimit': FieldValue.delete(),
+        if (account.creditLimit == null ||
+            account.creditLimitUpdatedAt == null)
+          'creditLimitUpdatedAt': FieldValue.delete(),
       };
 
   Map<String, dynamic> _anchorFields(AnchorChange c) => {
@@ -294,6 +307,9 @@ class FirestoreAccountRepository implements AccountRepository {
         openingDate: (data['openingDate'] as Timestamp?)?.toDate(),
         active: data['active'] as bool? ?? true,
         order: data['order'] as int? ?? 0,
+        creditLimit: (data['creditLimit'] as num?)?.toDouble(),
+        creditLimitUpdatedAt:
+            (data['creditLimitUpdatedAt'] as Timestamp?)?.toDate(),
       );
     } catch (e) {
       debugPrint('Skipping malformed account ${d.id}');
