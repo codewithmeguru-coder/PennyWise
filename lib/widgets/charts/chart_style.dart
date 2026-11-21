@@ -1,8 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../../privacy/savings_privacy.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/formatters.dart';
 
 /// Shared look for every PennyWise chart (Fuliza report now; Home charts,
 /// monthly trends and Insights later), so they read as one set.
@@ -97,9 +97,13 @@ class ChartStyle {
         ),
       );
 
-  /// Tooltip text for an amount.
-  static String money(String name, double value) =>
-      '$name\n${Formatters.currency(value)}';
+  /// Tooltip text for an amount ("KSh ••••" while balances are hidden).
+  static String money(BuildContext context, String name, double value) =>
+      '$name\n${SavingsPrivacy.money(context, value)}';
+
+  /// A value-axis label, or nothing while balances are hidden.
+  static String axis(BuildContext context, double value) =>
+      SavingsPrivacy.balancesHidden(context) ? '' : compact(value);
 }
 
 /// One coloured series of a [GroupedBarChart].
@@ -171,7 +175,7 @@ class GroupedBarChart extends StatelessWidget {
           gridData: ChartStyle.grid(context),
           borderData: ChartStyle.border,
           barTouchData: ChartStyle.touch(context, 
-            (g, r) => ChartStyle.money(
+            (g, r) => ChartStyle.money(context, 
               series.length > 1
                   ? '${labels[g]} · ${series[r].name}'
                   : labels[g],
@@ -189,7 +193,7 @@ class GroupedBarChart extends StatelessWidget {
                 getTitlesWidget: (value, meta) => SideTitleWidget(
                   meta: meta,
                   child: Text(
-                    ChartStyle.compact(value),
+                    ChartStyle.axis(context, value),
                     style: ChartStyle.axisLabel(context),
                   ),
                 ),

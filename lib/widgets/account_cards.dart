@@ -6,7 +6,6 @@ import '../accounts/money_account.dart';
 import '../models/transaction_model.dart';
 import '../privacy/savings_privacy.dart';
 import '../theme/app_theme.dart';
-import '../utils/formatters.dart';
 
 /// A row of account cards for the top of the Home screen: one per active
 /// account (SIM 1 M-Pesa, SIM 2 M-Pesa, Ziidi, Fuliza, Equity, Cash...),
@@ -119,8 +118,8 @@ class _AccountCard extends StatelessWidget {
     final limit = LoanLimit.of(b);
     final limitWarning = limit != null && limit.level != LoanLimitLevel.ok;
     final status = limit != null
-        ? '${Formatters.currency(limit.available)} left of '
-            '${Formatters.currency(limit.limit)}'
+        ? '${SavingsPrivacy.money(context, limit.available)} left of '
+            '${SavingsPrivacy.money(context, limit.limit)}'
         : isLoan
         ? (amount > 0
             ? (b.shownFromSms ? 'Owed · from latest SMS' : 'Owed')
@@ -133,7 +132,7 @@ class _AccountCard extends StatelessWidget {
             BalanceStatus.verified => 'Matches latest SMS',
             BalanceStatus.mismatch => masked
                 ? 'SMS differs'
-                : 'SMS differs by ${Formatters.currency(b.difference!.abs())}',
+                : 'SMS differs by ${SavingsPrivacy.money(context, b.difference!.abs())}',
             BalanceStatus.anchored => 'From starting balance',
             BalanceStatus.fromSms => 'From latest SMS',
             BalanceStatus.unverified => 'Estimated · no starting balance',
@@ -172,7 +171,7 @@ class _AccountCard extends StatelessWidget {
                     masked
                         ? SavingsPrivacyController.mask
                         : '${b.isEstimate && !isLoan ? '~' : ''}'
-                              '${Formatters.currency(amount)}',
+                              '${SavingsPrivacy.money(context, amount)}',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,

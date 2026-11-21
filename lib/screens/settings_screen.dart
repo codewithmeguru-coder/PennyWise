@@ -633,6 +633,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 Card(
                   child: SwitchListTile(
+                    key: const Key('start-hidden-switch'),
+                    secondary: Icon(
+                      Icons.visibility_off_outlined,
+                      color: context.colors.primary,
+                    ),
+                    title: const Text(
+                      'Start with balances hidden',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text(
+                      'All amounts show as KSh •••• each time you open '
+                      'PennyWise or leave it. Tap the eye on Home to show '
+                      'them. Reports you export are not affected.',
+                    ),
+                    value: privacy.startHidden,
+                    onChanged: privacy.setStartHidden,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: SwitchListTile(
                     key: const Key('hide-savings-switch'),
                     secondary: Icon(
                       Icons.visibility_off_outlined,

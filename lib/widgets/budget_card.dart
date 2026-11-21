@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../privacy/savings_privacy.dart';
 import '../models/monthly_summary.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -111,7 +112,7 @@ class _BudgetDetails extends StatelessWidget {
           ],
         ),
         Text(
-          Formatters.currency(remaining.abs()),
+          SavingsPrivacy.money(context, remaining.abs()),
           style: TextStyle(
             fontSize: 30,
             fontWeight: FontWeight.w700,
@@ -148,8 +149,8 @@ class _BudgetDetails extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '${Formatters.currency(summary.expenses)} of '
-                '${Formatters.currency(summary.budget!)} · $percentUsed%',
+                '${SavingsPrivacy.money(context, summary.expenses)} of '
+                '${SavingsPrivacy.money(context, summary.budget!)} · $percentUsed%',
                 textAlign: TextAlign.right,
                 style: TextStyle(
                   color: context.colors.textSecondary,

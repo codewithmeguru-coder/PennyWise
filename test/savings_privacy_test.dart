@@ -101,6 +101,8 @@ void main() {
         300,
         scrollable: find.byType(Scrollable).hitTestable().first,
       );
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
       await tester.tap(toggle);
       await tester.pumpAndSettle();
       expect(store.saved, isFalse);
@@ -118,6 +120,93 @@ void main() {
       expect(privacy.enabled, isFalse);
       expect(privacy.hidden, isFalse);
       privacy.dispose();
+    });
+  });
+
+  group('hide balances', () {
+    String balanceLine(WidgetTester tester) => tester
+        .widgetList<Text>(find.byType(Text))
+        .map((t) => t.data ?? '')
+        .firstWhere((d) => d.contains('10,000') || d == 'KSh ••••',
+            orElse: () => '');
+
+    testWidgets('the Home eye masks every amount and shows them again',
+        (tester) async {
+      phone(tester);
+      final store = MemorySavingsPrivacyStore(false);
+      final privacy = SavingsPrivacyController(store: store);
+      await pumpApp(
+        tester,
+        repository: FakeTransactionRepository(data()),
+        savingsPrivacy: privacy,
+      );
+      expect(find.textContaining('250.00'), findsWidgets);
+
+      await tester.tap(find.byKey(const Key('balances-eye')));
+      await tester.pumpAndSettle();
+      expect(privacy.balancesHidden, isTrue);
+      expect(store.flags[SavingsPrivacyStore.balancesKey], isTrue);
+      expect(find.textContaining('250.00'), findsNothing);
+      expect(find.textContaining('4,321'), findsNothing);
+      expect(find.textContaining('KSh ••••'), findsWidgets);
+      expect(balanceLine(tester), 'KSh ••••');
+
+      await tester.tap(find.byKey(const Key('balances-eye')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('250.00'), findsWidgets);
+    });
+
+    testWidgets('start hidden: leaving the app hides them again',
+        (tester) async {
+      phone(tester);
+      final privacy = SavingsPrivacyController(
+        store: MemorySavingsPrivacyStore(false, false, true),
+      );
+      await pumpApp(
+        tester,
+        repository: FakeTransactionRepository(data()),
+        savingsPrivacy: privacy,
+      );
+      // Start hidden wins at launch.
+      expect(privacy.balancesHidden, isTrue);
+      expect(find.textContaining('250.00'), findsNothing);
+      await tester.tap(find.byKey(const Key('balances-eye')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('250.00'), findsWidgets);
+
+      privacy.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      await tester.pump();
+      expect(privacy.balancesHidden, isFalse,
+          reason: 'a dialog or notification shade is not leaving');
+      privacy.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('250.00'), findsNothing);
+    });
+
+    test('without start hidden, the last choice survives a restart', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final shown = SavingsPrivacyController(
+          store: MemorySavingsPrivacyStore(false, false, false));
+      await shown.init();
+      expect(shown.balancesHidden, isFalse);
+      shown.dispose();
+
+      final hidden = SavingsPrivacyController(
+          store: MemorySavingsPrivacyStore(false, true, false));
+      await hidden.init();
+      expect(hidden.balancesHidden, isTrue);
+      expect(hidden.hidden, isTrue, reason: 'savings hide with balances');
+      hidden.dispose();
+    });
+
+    test('a fresh install starts hidden', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final fresh = SavingsPrivacyController(
+          store: MemorySavingsPrivacyStore(null, null, null));
+      await fresh.init();
+      expect(fresh.balancesHidden, isTrue);
+      expect(fresh.startHidden, isTrue);
+      fresh.dispose();
     });
   });
 }

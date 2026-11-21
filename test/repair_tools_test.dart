@@ -25,21 +25,23 @@ Future<void> openSettings(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Scrolls Settings to the end, so every entry has been built.
-Future<void> scrollToEnd(WidgetTester tester) async {
-  await tester.scrollUntilVisible(
-    find.text('How it works'),
-    300,
-    scrollable: find.byType(Scrollable).hitTestable().first,
-  );
+/// Scrolls Settings from top to bottom and returns every text seen on
+/// the way (the list builds lazily, so not all of it exists at once).
+Future<Set<String>> textsInSettings(WidgetTester tester) async {
+  final seen = <String>{};
+  void collect() => seen.addAll(tester
+      .widgetList<Text>(find.byType(Text))
+      .map((t) => t.data)
+      .whereType<String>());
+  final list = find.byType(Scrollable).hitTestable().first;
+  collect();
+  while (find.text('How it works').hitTestable().evaluate().isEmpty) {
+    await tester.drag(list, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    collect();
+  }
+  return seen;
 }
-
-Finder get anyRepairTool => find.byWidgetPredicate(
-  (w) =>
-      w is Text &&
-      (w.data == 'Fix old Ziidi records' ||
-          w.data == 'Fix moves between your accounts'),
-);
 
 void main() {
   test('only profiles created before this release see them', () {
@@ -61,17 +63,18 @@ void main() {
   testWidgets('the existing owner still has both tools', (tester) async {
     await pump(tester, DateTime(2026, 9, 1));
     await openSettings(tester);
-    await scrollToEnd(tester);
-    expect(find.text('Fix old Ziidi records'), findsOneWidget);
-    expect(find.text('Fix moves between your accounts'), findsOneWidget);
+    final seen = await textsInSettings(tester);
+    expect(seen, contains('Fix old Ziidi records'));
+    expect(seen, contains('Fix moves between your accounts'));
   });
 
   testWidgets('a new profile does not see them', (tester) async {
     await pump(tester, DateTime(2026, 11, 20));
     await openSettings(tester);
-    await scrollToEnd(tester);
-    expect(anyRepairTool, findsNothing);
+    final seen = await textsInSettings(tester);
+    expect(seen, isNot(contains('Fix old Ziidi records')));
+    expect(seen, isNot(contains('Fix moves between your accounts')));
     // Everyday entries are still there.
-    expect(find.text('Import last 30 days'), findsOneWidget);
+    expect(seen, contains('Import last 30 days'));
   });
 }

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../privacy/savings_privacy.dart';
 import '../models/monthly_summary.dart';
 import '../models/transaction_category.dart';
 import '../theme/app_theme.dart';
-import '../utils/formatters.dart';
 
 /// Horizontal bar chart of a month's spending per category, largest first.
 ///
@@ -40,7 +40,7 @@ class _CategoryBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final category = DefaultCategories.byId(item.categoryId);
-    final amount = Formatters.currency(item.amount);
+    final amount = SavingsPrivacy.money(context, item.amount);
     final percent = '${(item.share * 100).round()}%';
 
     return Semantics(
