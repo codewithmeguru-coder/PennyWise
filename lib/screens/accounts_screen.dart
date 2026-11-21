@@ -156,6 +156,8 @@ class AccountsScreen extends StatelessWidget {
                           ? 'Owed ${Formatters.currency(-a.openingBalance! + 0)}'
                           : 'Starting balance '
                               '${a.kind == AccountKind.savings ? SavingsPrivacy.amount(context, a.openingBalance!) : Formatters.currency(a.openingBalance!)}',
+                    if (a.kind == AccountKind.loan && a.creditLimit != null)
+                      'Limit ${Formatters.currency(a.creditLimit!)}',
                     if (!a.active) 'Hidden',
                   ].join(' · ')),
                   trailing: transactions == null
@@ -212,6 +214,9 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
         null => '',
         final b => (_isLoan && b != 0 ? -b : b).toStringAsFixed(2),
       });
+  /// A loan's limit (e.g. the Fuliza limit for this SIM), optional.
+  late final TextEditingController _limit = TextEditingController(
+      text: widget.existing?.creditLimit?.toStringAsFixed(2) ?? '');
   late AccountKind _kind = widget.existing?.kind ?? AccountKind.bank;
   late AccountProvider _provider =
       widget.existing?.provider ?? AccountProvider.equity;
@@ -230,6 +235,7 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
   void dispose() {
     _name.dispose();
     _opening.dispose();
+    _limit.dispose();
     super.dispose();
   }
 
@@ -274,6 +280,15 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
         ? -entered
         : entered;
     final existing = widget.existing;
+    final limitText = _limit.text.trim();
+    final limit =
+        _isLoan && limitText.isNotEmpty ? double.parse(limitText) : null;
+    // Keep the old date when the limit didn't change.
+    final limitDate = limit == null
+        ? null
+        : limit == existing?.creditLimit
+            ? existing?.creditLimitUpdatedAt ?? DateTime.now()
+            : DateTime.now();
     final result = existing == null
         ? MoneyAccount(
             id: _newId(),
@@ -298,6 +313,8 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
                 opening == null ? null : (_openingDate ?? DateTime.now()),
             active: _active,
             order: existing.order,
+            creditLimit: limit,
+            creditLimitUpdatedAt: limitDate,
           );
     Navigator.of(context).pop(result);
   }
@@ -387,6 +404,26 @@ class _AccountEditorScreenState extends State<AccountEditorScreen> {
               trailing: const Icon(Icons.calendar_today_rounded),
               onTap: _pickDate,
             ),
+            if (_isLoan) ...[
+              const SizedBox(height: 8),
+              TextFormField(
+                key: const Key('loanLimitField'),
+                controller: _limit,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Limit (optional)',
+                  helperText: 'The most you can borrow on this account, e.g. '
+                      'your Fuliza limit. PennyWise shows what is left and '
+                      'warns you when 80% is used. Leave empty to remove.',
+                  helperMaxLines: 3,
+                  prefixText: '${Formatters.currencySymbol} ',
+                ),
+                validator: (v) => (v ?? '').trim().isEmpty
+                    ? null
+                    : Validators.amount(v!.trim()),
+              ),
+            ],
             if (!_isNew)
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

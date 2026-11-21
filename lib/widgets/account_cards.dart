@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../accounts/account_balances.dart';
+import '../accounts/loan_limit.dart';
 import '../accounts/money_account.dart';
 import '../models/transaction_model.dart';
 import '../privacy/savings_privacy.dart';
@@ -115,7 +116,12 @@ class _AccountCard extends StatelessWidget {
     final amount = isLoan ? b.owed : b.shown;
     final masked = b.account.kind == AccountKind.savings &&
         SavingsPrivacy.hidden(context);
-    final status = isLoan
+    final limit = LoanLimit.of(b);
+    final limitWarning = limit != null && limit.level != LoanLimitLevel.ok;
+    final status = limit != null
+        ? '${Formatters.currency(limit.available)} left of '
+            '${Formatters.currency(limit.limit)}'
+        : isLoan
         ? (amount > 0
             ? 'Owed'
             : amount < 0
@@ -174,13 +180,25 @@ class _AccountCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (limit != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: limit.usedShare.clamp(0.0, 1.0),
+                      minHeight: 4,
+                      color: limitWarning
+                          ? context.colors.warning
+                          : context.colors.primary,
+                    ),
+                  ),
                 Text(
                   status,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: b.differs || (isLoan && amount < 0)
+                    fontWeight: limitWarning ? FontWeight.w600 : null,
+                    color: b.differs || (isLoan && amount < 0) || limitWarning
                         ? context.colors.warning
                         : context.colors.textSecondary,
                   ),

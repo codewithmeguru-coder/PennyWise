@@ -124,6 +124,8 @@ class AnchorKeeper {
         openingDate: last.beforeDate,
         active: now.active,
         order: now.order,
+        creditLimit: now.creditLimit,
+        creditLimitUpdatedAt: now.creditLimitUpdatedAt,
       ),
       last,
     );
