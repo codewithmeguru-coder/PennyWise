@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../privacy/savings_privacy.dart';
 import '../models/category_budget.dart';
 import '../models/monthly_summary.dart';
 import '../models/transaction_category.dart';
 import '../theme/app_theme.dart';
-import '../utils/formatters.dart';
 
 /// The month's spending per category, each against its limit when it has
 /// one (see [CategoryBudgetSummary]).
@@ -59,7 +59,7 @@ class _LimitRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final category = DefaultCategories.byId(row.categoryId);
-    final amount = Formatters.currency(row.spent);
+    final amount = SavingsPrivacy.money(context, row.spent);
     final percent = '${(row.share * 100).round()}%';
     final status = row.status;
     final color = switch (status) {
@@ -70,13 +70,13 @@ class _LimitRow extends StatelessWidget {
 
     final String? limitText;
     if (row.hasLimit) {
-      final limit = Formatters.currency(row.limit!);
+      final limit = SavingsPrivacy.money(context, row.limit!);
       final remaining = row.remaining!;
       final used = '${(row.usedFraction! * 100).round()}% used';
       limitText = status == BudgetStatus.over
-          ? 'Over budget: ${Formatters.currency(-remaining)} over the $limit '
+          ? 'Over budget: ${SavingsPrivacy.money(context, -remaining)} over the $limit '
                 'limit · $used'
-          : '${Formatters.currency(remaining)} left of $limit · $used'
+          : '${SavingsPrivacy.money(context, remaining)} left of $limit · $used'
                 '${status == BudgetStatus.nearLimit ? ' · near limit' : ''}';
     } else {
       limitText = null;

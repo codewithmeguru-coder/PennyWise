@@ -1,8 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../../privacy/savings_privacy.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/formatters.dart';
 import 'chart_style.dart';
 
 /// Spending through the month (one point per day so far) against the
@@ -34,8 +34,8 @@ class SpendingVsBudgetChart extends StatelessWidget {
     final lineColor = over ? context.colors.expense : context.colors.primary;
     return Semantics(
       label:
-          'Spent ${Formatters.currency(spent)} so far'
-          '${budget == null ? '' : ' of a ${Formatters.currency(budget!)} budget'}',
+          'Spent ${SavingsPrivacy.money(context, spent)} so far'
+          '${budget == null ? '' : ' of a ${SavingsPrivacy.money(context, budget!)} budget'}',
       excludeSemantics: true,
       child: Column(
         children: [
@@ -55,7 +55,7 @@ class SpendingVsBudgetChart extends StatelessWidget {
                     getTooltipItems: (spots) => [
                       for (final s in spots)
                         LineTooltipItem(
-                          'Day ${s.x.toInt()}\n${Formatters.currency(s.y)}',
+                          'Day ${s.x.toInt()}\n${SavingsPrivacy.money(context, s.y)}',
                           TextStyle(
                             color: context.colors.surface,
                             fontSize: 12,
@@ -86,7 +86,7 @@ class SpendingVsBudgetChart extends StatelessWidget {
                       getTitlesWidget: (value, meta) => SideTitleWidget(
                         meta: meta,
                         child: Text(
-                          ChartStyle.compact(value),
+                          ChartStyle.axis(context, value),
                           style: ChartStyle.axisLabel(context),
                         ),
                       ),

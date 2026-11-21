@@ -10,6 +10,7 @@ import '../accounts/account_repository.dart';
 import '../sms/sms_import_service.dart';
 import '../widgets/account_cards.dart';
 import '../models/transaction_model.dart';
+import '../privacy/savings_privacy.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_store.dart';
 import '../theme/app_theme.dart';
@@ -145,6 +146,15 @@ class DashboardScreen extends StatelessWidget {
                 ),
               },
               actions: [
+                if (SavingsPrivacy.maybeOf(context) case final p?)
+                  IconButton(
+                    key: const Key('balances-eye'),
+                    tooltip: p.balancesHidden ? 'Show balances' : 'Hide balances',
+                    icon: Icon(p.balancesHidden
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined),
+                    onPressed: p.toggleBalances,
+                  ),
                 if (onOpenSettings != null)
                   IconButton(
                     tooltip: 'Settings',

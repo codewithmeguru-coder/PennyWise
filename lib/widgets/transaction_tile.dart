@@ -117,7 +117,7 @@ class _Amount extends StatelessWidget {
     if (isSavings && SavingsPrivacy.hidden(context)) {
       return _line(SavingsPrivacyController.mask);
     }
-    if (fee <= 0) return _line('$sign${Formatters.currency(t.amount)}');
+    if (fee <= 0) return _line('$sign${SavingsPrivacy.money(context, t.amount)}');
 
     // Expenses and debt repayments: the fee is part of what they cost.
     final spending = t.type == TransactionType.expense ||
@@ -125,13 +125,13 @@ class _Amount extends StatelessWidget {
     final main = spending
         ? Ledger.fromCents(Ledger.toCents(t.amount) + Ledger.toCents(fee))
         : t.amount;
-    final feeText = Formatters.currency(fee);
+    final feeText = SavingsPrivacy.money(context, fee);
     return Column(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        _line('$sign${Formatters.currency(main)}'),
+        _line('$sign${SavingsPrivacy.money(context, main)}'),
         Text(
           spending ? 'incl. $feeText fee' : '+$feeText fee',
           style: TextStyle(color: context.colors.expense, fontSize: 12),

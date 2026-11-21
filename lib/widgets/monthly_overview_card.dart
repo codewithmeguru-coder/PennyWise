@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../privacy/savings_privacy.dart';
 import '../data/budget_repository.dart';
 import '../data/category_budget_repository.dart';
 import '../data/data_exception.dart';
@@ -466,7 +467,7 @@ class _Figure extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Formatters.currency(amount);
+    final text = SavingsPrivacy.money(context, amount);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -511,10 +512,10 @@ class _BudgetLine extends StatelessWidget {
       children: [
         Text(
           remaining < 0
-              ? '${Formatters.currency(-remaining)} over budget · '
+              ? '${SavingsPrivacy.money(context, -remaining)} over budget · '
                     '$percentUsed% used'
-              : '${Formatters.currency(remaining)} left of '
-                    '${Formatters.currency(summary.budget!)} · '
+              : '${SavingsPrivacy.money(context, remaining)} left of '
+                    '${SavingsPrivacy.money(context, summary.budget!)} · '
                     '$percentUsed% used',
           style: TextStyle(
             fontWeight: FontWeight.w600,

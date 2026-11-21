@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../../privacy/savings_privacy.dart';
 import '../../utils/formatters.dart';
 import 'chart_style.dart';
 
@@ -43,7 +44,7 @@ class StackedBarChart extends StatelessWidget {
                 gridData: ChartStyle.grid(context),
                 borderData: ChartStyle.border,
                 barTouchData: ChartStyle.touch(context, 
-                  (g, _) => ChartStyle.money(labels[g], _total(g)),
+                  (g, _) => ChartStyle.money(context, labels[g], _total(g)),
                 ),
                 titlesData: FlTitlesData(
                   topTitles: const AxisTitles(),
@@ -56,7 +57,7 @@ class StackedBarChart extends StatelessWidget {
                       getTitlesWidget: (value, meta) => SideTitleWidget(
                         meta: meta,
                         child: Text(
-                          ChartStyle.compact(value),
+                          ChartStyle.axis(context, value),
                           style: ChartStyle.axisLabel(context),
                         ),
                       ),
@@ -145,9 +146,10 @@ class StackedBarChart extends StatelessWidget {
   }
 
   /// "Oct: Food KSh 1,200.00, Other KSh 300.00", for screen readers.
-  static String describe(List<String> labels, List<ChartSeries> series) => [
+  static String describe(List<String> labels, List<ChartSeries> series,
+          {bool hidden = false}) => [
     for (var g = 0; g < labels.length; g++)
       '${labels[g]}: ${[for (final s in series)
-        if (s.values[g] > 0) '${s.name} ${Formatters.currency(s.values[g])}'].join(', ')}',
+        if (s.values[g] > 0) '${s.name} ${hidden ? SavingsPrivacyController.mask : Formatters.currency(s.values[g])}'].join(', ')}',
   ].join('; ');
 }

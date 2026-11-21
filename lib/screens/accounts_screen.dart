@@ -153,11 +153,11 @@ class AccountsScreen extends StatelessWidget {
                     if (a.simLabel != null) a.simLabel!,
                     if (a.openingBalance != null)
                       a.kind == AccountKind.loan
-                          ? 'Owed ${Formatters.currency(-a.openingBalance! + 0)}'
+                          ? 'Owed ${SavingsPrivacy.money(context, -a.openingBalance! + 0)}'
                           : 'Starting balance '
-                              '${a.kind == AccountKind.savings ? SavingsPrivacy.amount(context, a.openingBalance!) : Formatters.currency(a.openingBalance!)}',
+                              '${a.kind == AccountKind.savings ? SavingsPrivacy.amount(context, a.openingBalance!) : SavingsPrivacy.money(context, a.openingBalance!)}',
                     if (a.kind == AccountKind.loan && a.creditLimit != null)
-                      'Limit ${Formatters.currency(a.creditLimit!)}',
+                      'Limit ${SavingsPrivacy.money(context, a.creditLimit!)}',
                     if (!a.active) 'Hidden',
                   ].join(' · ')),
                   trailing: transactions == null

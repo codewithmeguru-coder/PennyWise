@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../privacy/savings_privacy.dart';
 import '../data/budget_repository.dart';
 import '../data/category_budget_repository.dart';
 import '../data/data_exception.dart';
@@ -185,7 +186,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
       highlight: totals.length - 1,
       semanticLabel: [
         for (final (m, spent) in totals)
-          '${Formatters.monthYear(m)}: ${Formatters.currency(spent)}',
+          '${Formatters.monthYear(m)}: ${SavingsPrivacy.money(context, spent)}',
       ].join(', '),
     );
   }
@@ -267,7 +268,7 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
               const SizedBox(height: 8),
               for (final e in add.entries)
                 Text('• ${DefaultCategories.byId(e.key).name}: '
-                    '${Formatters.currency(e.value)}'),
+                    '${SavingsPrivacy.money(context, e.value)}'),
               const SizedBox(height: 8),
               Text([
                 if (kept > 0)
@@ -351,8 +352,8 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
           icon: Icons.warning_amber_rounded,
           color: context.colors.warning,
           text: 'Category limits add up to '
-              '${Formatters.currency(cats.totalLimits)}, more than the '
-              'overall budget of ${Formatters.currency(cats.overallBudget!)}. '
+              '${SavingsPrivacy.money(context, cats.totalLimits)}, more than the '
+              'overall budget of ${SavingsPrivacy.money(context, cats.overallBudget!)}. '
               'Neither is changed.',
         ),
       if (cats.rows.isEmpty)
@@ -466,7 +467,7 @@ class _StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Formatters.currency(amount);
+    final text = SavingsPrivacy.money(context, amount);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),

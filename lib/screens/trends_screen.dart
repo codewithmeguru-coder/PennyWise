@@ -127,8 +127,8 @@ class _TrendsScreenState extends State<TrendsScreen> {
               semanticLabel: [
                 for (final m in trend.months)
                   '${Formatters.monthYear(m.month)}: income '
-                      '${Formatters.currency(m.income)}, expenses '
-                      '${Formatters.currency(m.expenses)}',
+                      '${SavingsPrivacy.money(context, m.income)}, expenses '
+                      '${SavingsPrivacy.money(context, m.expenses)}',
               ].join('; '),
             ),
           ),
@@ -144,7 +144,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
               semanticLabel: [
                 for (final m in trend.months)
                   '${Formatters.monthYear(m.month)}: net '
-                      '${Formatters.currency(m.net)}',
+                      '${SavingsPrivacy.money(context, m.net)}',
               ].join('; '),
             ),
           ),
@@ -220,7 +220,8 @@ class _TrendsScreenState extends State<TrendsScreen> {
       onSelect: (i) {
         if (i < top.length) setState(() => _focus = top[i]);
       },
-      semanticLabel: StackedBarChart.describe(labels, series),
+      semanticLabel: StackedBarChart.describe(labels, series,
+          hidden: SavingsPrivacy.balancesHidden(context)),
     );
   }
 
@@ -338,7 +339,7 @@ class _ChangeRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              Formatters.currency(change.current),
+              SavingsPrivacy.money(context, change.current),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
@@ -366,7 +367,7 @@ Widget changeText(
   final good = up == upIsGood;
   final pct = c.percent;
   return Text(
-    '${up ? '▲' : '▼'} ${Formatters.currency(diff.abs())}'
+    '${up ? '▲' : '▼'} ${SavingsPrivacy.money(context, diff.abs())}'
     '${pct == null ? ' (new)' : ' (${up ? '+' : '-'}${pct.abs().toStringAsFixed(1)}%)'}',
     textAlign: TextAlign.right,
     style: TextStyle(
@@ -404,8 +405,8 @@ class _Movers extends StatelessWidget {
               ),
               title: Text(trendName(m.categoryId)),
               subtitle: Text(
-                '${Formatters.currency(m.amounts.previous)}'
-                ' → ${Formatters.currency(m.amounts.current)}',
+                '${SavingsPrivacy.money(context, m.amounts.previous)}'
+                ' → ${SavingsPrivacy.money(context, m.amounts.current)}',
               ),
               trailing: changeText(context, m.amounts, upIsGood: false),
               onTap: () => onFocus(m.categoryId),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../privacy/savings_privacy.dart';
 import '../theme/app_theme.dart';
-import '../utils/formatters.dart';
 
 /// The green hero card at the top of the dashboard: money available to
 /// spend now, and money in savings (kept separate). The month's income and
@@ -89,7 +88,7 @@ class BalanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            Formatters.currency(balance),
+            SavingsPrivacy.money(context, balance),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 30,
@@ -113,7 +112,7 @@ class BalanceCard extends StatelessWidget {
                   ),
                 ),
                 if (SavingsPrivacy.maybeOf(context) case final p?
-                    when p.enabled)
+                    when p.enabled && !p.balancesHidden)
                   IconButton(
                     key: const Key('savings-eye'),
                     tooltip: p.hidden ? 'Show savings' : 'Hide savings',

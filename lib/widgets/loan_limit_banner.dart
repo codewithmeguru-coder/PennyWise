@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../privacy/savings_privacy.dart';
 import '../accounts/account_balances.dart';
 import '../accounts/loan_limit.dart';
 import '../models/ledger.dart';
 import '../theme/app_theme.dart';
-import '../utils/formatters.dart';
 
 /// A reminder on Home when a loan (e.g. one SIM's Fuliza) has used 80% or
 /// more of the limit the user entered, saying what is still available.
@@ -111,8 +111,8 @@ class _LoanLimitBannerState extends State<LoanLimitBanner> {
         subtitle: Text(
           [
             for (final l in shown)
-              '${l.account.name}: ${Formatters.currency(l.available)} left of '
-                  '${Formatters.currency(l.limit)}',
+              '${l.account.name}: ${SavingsPrivacy.money(context, l.available)} left of '
+                  '${SavingsPrivacy.money(context, l.limit)}',
           ].join('\n'),
         ),
         isThreeLine: shown.length > 1,

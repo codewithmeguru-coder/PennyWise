@@ -1,10 +1,10 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../../privacy/savings_privacy.dart';
 import '../../models/monthly_summary.dart';
 import '../../models/transaction_category.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/formatters.dart';
 import 'chart_style.dart';
 
 /// One slice of a [CategoryDonut]: a category, or "Other" (null id).
@@ -78,7 +78,7 @@ class CategoryDonut extends StatelessWidget {
     final total = parts.fold(0.0, (sum, s) => sum + s.amount);
     return Semantics(
       label:
-          'Spending by category: ${[for (final s in parts) '${s.label} ${Formatters.currency(s.amount)}'].join(', ')}',
+          'Spending by category: ${[for (final s in parts) '${s.label} ${SavingsPrivacy.money(context, s.amount)}'].join(', ')}',
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
@@ -135,7 +135,7 @@ class CategoryDonut extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(8),
             child: Text(
-              ChartStyle.compact(total),
+              SavingsPrivacy.balancesHidden(context) ? '••••' : ChartStyle.compact(total),
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 color: context.colors.textPrimary,
@@ -174,7 +174,7 @@ class CategoryDonut extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                Formatters.currency(parts[i].amount),
+                SavingsPrivacy.money(context, parts[i].amount),
                 style: TextStyle(
                   fontSize: 12,
                   color: context.colors.textSecondary,
