@@ -62,6 +62,8 @@ class MoneyAccount {
     this.openingDate,
     this.active = true,
     this.order = 0,
+    this.creditLimit,
+    this.creditLimitUpdatedAt,
   });
 
   final String id;
@@ -85,6 +87,14 @@ class MoneyAccount {
   /// False hides the account without deleting its history.
   final bool active;
   final int order;
+
+  /// For a loan (e.g. Fuliza for one SIM): the most the user can borrow,
+  /// as they typed it. Null when not set. What is still available is this
+  /// minus what is owed (see `LoanLimit`).
+  final double? creditLimit;
+
+  /// When [creditLimit] was last set.
+  final DateTime? creditLimitUpdatedAt;
 
   bool get isSim => simSlot != null;
 
@@ -121,6 +131,8 @@ class MoneyAccount {
         openingDate: openingDate ?? this.openingDate,
         active: active ?? this.active,
         order: order ?? this.order,
+        creditLimit: creditLimit,
+        creditLimitUpdatedAt: creditLimitUpdatedAt,
       );
 
   /// The suggested starter set: for each SIM, its M-Pesa plus that SIM's

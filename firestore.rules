@@ -316,7 +316,7 @@ service cloud.firestore {
           && data.keys().hasOnly(
             ['name', 'kind', 'provider', 'simSlot', 'parentId',
              'openingBalance', 'openingDate', 'active', 'order', 'createdAt',
-             'updatedAt'])
+             'updatedAt', 'creditLimit', 'creditLimitUpdatedAt'])
           && accountId.matches('^[a-z0-9-]{1,48}$')
           && data.name is string
           && data.name.size() > 0 && data.name.size() <= 40
@@ -334,6 +334,13 @@ service cloud.firestore {
           && (!('openingDate' in data) || data.openingDate is timestamp)
           && data.active is bool
           && data.order is int && data.order >= 0 && data.order <= 10000
+          // A loan's limit (e.g. one SIM's Fuliza limit), loans only.
+          && (!('creditLimit' in data)
+              || (data.kind == 'loan' && data.creditLimit is number
+                  && data.creditLimit > 0 && data.creditLimit < 1000000000))
+          && (!('creditLimitUpdatedAt' in data)
+              || ('creditLimit' in data
+                  && data.creditLimitUpdatedAt is timestamp))
           && data.createdAt is timestamp;
       }
 

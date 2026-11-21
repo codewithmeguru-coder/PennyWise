@@ -16,6 +16,7 @@ import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/balance_card.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/loan_limit_banner.dart';
 import '../widgets/monthly_overview_card.dart';
 import '../widgets/section_header.dart';
 import '../widgets/transaction_tile.dart';
@@ -183,6 +184,19 @@ class DashboardScreen extends StatelessWidget {
                               onManage: onManageAccounts ?? () {},
                               onSetBalances: onSetBalances,
                               onSetUp: acc.createStarterSet,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  // A reminder when a loan (Fuliza) is near its limit.
+                  if (accounts case final acc?)
+                    ListenableBuilder(
+                      listenable: acc,
+                      builder: (context, _) => acc.isLoaded
+                          ? LoanLimitBanner(
+                              balances: AccountBalance.forAll(
+                                  acc.active, store.transactions),
+                              scope: user?.uid ?? '',
+                              onTap: onManageAccounts,
                             )
                           : const SizedBox.shrink(),
                     ),
