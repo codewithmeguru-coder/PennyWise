@@ -123,10 +123,12 @@ class _AccountCard extends StatelessWidget {
             '${Formatters.currency(limit.limit)}'
         : isLoan
         ? (amount > 0
-            ? 'Owed'
+            ? (b.shownFromSms ? 'Owed · from latest SMS' : 'Owed')
             : amount < 0
                 ? 'Credit? Check the amount owed'
-                : (b.hasOpening ? 'Nothing owed' : 'Owed: not set'))
+                : (b.hasOpening || b.shownFromSms
+                    ? 'Nothing owed'
+                    : 'Owed: not set'))
         : switch (b.status) {
             BalanceStatus.verified => 'Matches latest SMS',
             BalanceStatus.mismatch => masked

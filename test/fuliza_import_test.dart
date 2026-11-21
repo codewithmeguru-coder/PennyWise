@@ -23,9 +23,11 @@ import 'fake_transaction_repository.dart';
 
 final day = DateTime(2026, 10, 1, 9);
 
-String draw(String code, String amount, String fee) =>
+String draw(String code, String amount, String fee,
+        [String outstanding = '999.00']) =>
     '$code Confirmed. Fuliza M-PESA amount is Ksh $amount. Access Fee '
-    'charged Ksh $fee. Total Fuliza M-PESA outstanding amount is Ksh999.00 '
+    'charged Ksh $fee. Total Fuliza M-PESA outstanding amount is '
+    'Ksh$outstanding '
     'due on 21/11/26. To check daily charges, Dial *234*0#OK Select Query '
     'Charges';
 String repay(String code, String amount) =>
@@ -465,7 +467,9 @@ void main() {
         final paid = convert(payment('UJMAB1CDE1', '50.00'), 0, accounts)
             .withId('mpesa_UJMAB1CDE1');
         return setup([
-          sms(draw('UJMAB1CDE1', '50.00', '0.50'), slot: 0, minutes: 1),
+          // The loan card follows the outstanding amount the SMS states.
+          sms(draw('UJMAB1CDE1', '50.00', '0.50', '50.50'),
+              slot: 0, minutes: 1),
         ], existing: [paid]);
       }))!;
       final accounts = MoneyAccount.starterSet();
