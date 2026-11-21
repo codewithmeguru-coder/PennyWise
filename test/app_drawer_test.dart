@@ -13,8 +13,13 @@ Future<void> openMenu(WidgetTester tester) async {
 
 /// Taps an item inside the open drawer.
 Future<void> tapInDrawer(WidgetTester tester, String label) async {
-  await tester.tap(
-      find.descendant(of: find.byType(Drawer), matching: find.text(label)));
+  final item =
+      find.descendant(of: find.byType(Drawer), matching: find.text(label));
+  // The list scrolls; on the small test screen an item can sit under the
+  // footer.
+  await tester.ensureVisible(item);
+  await tester.pumpAndSettle();
+  await tester.tap(item);
   await tester.pumpAndSettle();
 }
 
@@ -35,6 +40,7 @@ void main() {
       'Dashboard',
       'Transactions',
       'Reports & Budgets',
+      'Download report',
       'Settings',
       'Automatic Detection',
       'Log out',
@@ -91,6 +97,16 @@ void main() {
     await openMenu(tester);
     await tapInDrawer(tester, 'Automatic Detection');
     expect(find.text('Automatic Transaction Detection'), findsOneWidget);
+  });
+
+  testWidgets('Download report opens the report screen', (tester) async {
+    await pumpApp(tester);
+
+    await openMenu(tester);
+    await tapInDrawer(tester, 'Download report');
+    expect(find.text('Include transactions'), findsOneWidget);
+    expect(find.text('All accounts'), findsOneWidget);
+    expect(find.textContaining('Share / Save'), findsOneWidget);
   });
 
   testWidgets('shows whether automatic detection is on', (tester) async {

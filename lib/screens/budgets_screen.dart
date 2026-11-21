@@ -33,6 +33,7 @@ class BudgetsScreen extends StatefulWidget {
     this.month,
     this.categoryBudgets,
     this.onOpenTrends,
+    this.onOpenReport,
   });
 
   final TransactionStore store;
@@ -43,6 +44,9 @@ class BudgetsScreen extends StatefulWidget {
 
   /// Opens month-by-month Trends; null hides the button.
   final VoidCallback? onOpenTrends;
+
+  /// Opens Download report (PDF / CSV); null hides the button.
+  final VoidCallback? onOpenReport;
 
   /// The month shown, shared with Home. Null: this screen keeps its own.
   final MonthSelection? month;
@@ -122,6 +126,12 @@ class _BudgetsScreenState extends State<BudgetsScreen> {
               onPressed: widget.onOpenTrends,
               icon: const Icon(Icons.insights_rounded),
               label: const Text('Trends'),
+            ),
+          if (widget.onOpenReport != null)
+            IconButton(
+              tooltip: 'Download report',
+              onPressed: widget.onOpenReport,
+              icon: const Icon(Icons.file_download_outlined),
             ),
         ],
         leading: widget.onOpenMenu == null
