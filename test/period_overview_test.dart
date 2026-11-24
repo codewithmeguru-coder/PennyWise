@@ -264,6 +264,90 @@ void main() {
       expect(find.byKey(const Key('overview-range')), findsNothing);
     });
 
+    testWidgets('Day: tapping the date opens a calendar to jump to a day', (
+      tester,
+    ) async {
+      await show(tester);
+      await pick(tester, SpendPeriod.day);
+      await tester.tap(find.byKey(const Key('overview-range-picker')));
+      await tester.pumpAndSettle();
+      expect(find.text('Go to day'), findsOneWidget);
+      await tester.tap(find.text('26'));
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(rangeText(tester), 'Monday, 26 October 2026');
+      expect(inCard(find.text('KSh 40.00')), findsWidgets);
+    });
+
+    testWidgets('Week: any picked day shows its Monday-to-Sunday week', (
+      tester,
+    ) async {
+      await show(tester);
+      await pick(tester, SpendPeriod.week);
+      await tester.tap(find.byKey(const Key('overview-range-picker')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('22'));
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(rangeText(tester), 'Mon 19 Oct – Sun 25 Oct 2026');
+    });
+
+    testWidgets('Cancelling the calendar keeps the day', (tester) async {
+      await show(tester);
+      await pick(tester, SpendPeriod.day);
+      await tester.tap(find.byKey(const Key('overview-range-picker')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(rangeText(tester), 'Saturday, 31 October 2026');
+    });
+
+    testWidgets('Month: a month grid jumps the shared month; no future '
+        'months', (tester) async {
+      final month = await show(tester);
+      await tester.tap(find.byKey(const Key('month-switcher-picker')));
+      await tester.pumpAndSettle();
+      expect(find.text('Go to month'), findsOneWidget);
+      expect(find.text('2026'), findsOneWidget);
+      OutlinedButton monthButton(int m) => tester.widget<OutlinedButton>(
+        find.ancestor(
+          of: find.byKey(Key('month-picker-$m')),
+          matching: find.byType(OutlinedButton),
+        ),
+      );
+      expect(monthButton(11).onPressed, isNull); // November: future
+      expect(monthButton(9).onPressed, isNotNull);
+      final nextYear = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byTooltip('Next year'),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(nextYear.onPressed, isNull);
+      await tester.tap(find.byTooltip('Previous year'));
+      await tester.pumpAndSettle();
+      expect(find.text('2025'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('month-picker-3')));
+      await tester.pumpAndSettle();
+      expect(month.value, DateTime(2025, 3));
+      expect(inCard(find.text('March 2025')), findsOneWidget);
+    });
+
+    testWidgets('Month grid stops at January 2020', (tester) async {
+      final month = await show(tester);
+      month.value = DateTime(2020, 3);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('month-switcher-picker')));
+      await tester.pumpAndSettle();
+      final prev = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byTooltip('Previous year'),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(prev.onPressed, isNull);
+    });
+
     testWidgets('loading, then an error with Retry', (tester) async {
       await show(tester, store: TransactionStore(_NeverLoads()), settle: false);
       await tester.tap(find.byKey(const Key('period-day')));

@@ -15,6 +15,7 @@ import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import 'charts/category_donut.dart';
 import 'month_switcher.dart';
+import 'period_picker.dart';
 
 /// Home's overview: income, spending and net, and spending by category.
 ///
@@ -415,16 +416,24 @@ class _RangeSwitcher extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
-                Text(
-                  range.label,
-                  key: const Key('overview-range'),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: context.colors.textPrimary,
+                PickerLabel(
+                  key: const Key('overview-range-picker'),
+                  tooltip: 'Go to $unit',
+                  onTap: () async {
+                    final picked = await pickPeriod(context, range, now: now);
+                    if (picked != null) onChanged(picked);
+                  },
+                  child: Text(
+                    range.label,
+                    key: const Key('overview-range'),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: context.colors.textPrimary,
+                    ),
                   ),
                 ),
                 if (current != null)

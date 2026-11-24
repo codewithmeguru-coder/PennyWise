@@ -52,6 +52,9 @@ class Formatters {
         : '${day(first)} ${first.year} – ${day(last)} ${last.year}';
   }
 
+  /// 9 -> "Sep"
+  static String shortMonth(int month) => _months[month - 1];
+
   /// e.g. "12 Sep 2026"
   static String shortDate(DateTime date) =>
       '${date.day} ${_months[date.month - 1]} ${date.year}';
